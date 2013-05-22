@@ -205,7 +205,7 @@ static void resetConf(void)
     cfg.accz_vel_cf               = 0.985f;     // Crashpilot: Value for complementary filter accz and barovelocity
     cfg.accz_alt_cf               = 0.940f;     // Crashpilot: Value for complementary filter accz and altitude
     cfg.baro_lag                  = 0.3f;       // Lag of Baro
-    cfg.barodownscale             = 0.8;        // Scale downmovement down (because copter drops faster than rising)
+    cfg.barodownscale             = 0.8f;       // Scale downmovement down (because copter drops faster than rising)
     // Autoland
 		cfg.autolandrate              = 75;         // Temporary value "64" increase to increase Landingspeed
 
@@ -274,7 +274,8 @@ static void resetConf(void)
     // gps/nav
     cfg.gps_type                  = 1;          // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3, GPS_UBLOX_DUMB = 4
     cfg.gps_baudrate              = 38400;      // Changed 5/3/13 was 115200;
-    cfg.gps_ins_vel               = 0.65;       // Crashpilot GPS INS The LOWER the value the closer to gps speed // Dont go to high here
+    cfg.gps_ins_vel               = 0.65f;      // Crashpilot GPS INS The LOWER the value the closer to gps speed // Dont go to high here
+    cfg.gps_proj_smooth           = 0.5f;       // 0 Disables the higher the more smoothing. 1.0 is useless. Smoothes the speed for projecting coordinates (defined by gps_lag). The Speed is based on the "cfg.gps_ins_vel" result
     cfg.gps_lag                   = 1.0f;       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind, 1.5s is better for ublox on the "bench test"
     cfg.gps_phase                 = 0;          // Make a phaseshift +-90 Deg max of GPS output
     cfg.gps_ph_minsat             = 6;          // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more

@@ -187,6 +187,7 @@ const clivalue_t valueTable[] = {
     { "gps_baudrate",              VAR_UINT32, &cfg.gps_baudrate,             1200,     115200, 0 },
     { "gps_type",                  VAR_UINT8,  &cfg.gps_type,                    0,          9, 0 },
 		{ "gps_ins_vel",               VAR_FLOAT,  &cfg.gps_ins_vel,                 0,          1, 1 },
+		{ "gps_proj_smooth",           VAR_FLOAT,  &cfg.gps_proj_smooth,             0,     0.999f, 1 },		
 	  { "gps_lag",                   VAR_FLOAT,  &cfg.gps_lag,                     0,         10, 1 },
     { "gps_phase",                 VAR_FLOAT,  &cfg.gps_phase,                 -30,         30, 1 },
 		{ "gps_ph_minsat",             VAR_UINT8,  &cfg.gps_ph_minsat,               5,         10, 1 },

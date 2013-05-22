@@ -4,7 +4,7 @@
 #define VBATFREQ 6        // to read battery voltage - nth number of loop iterations
 
 #define  VERSION  211
-#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10Beta C " __DATE__ " / " __TIME__
+#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10Beta D " __DATE__ " / " __TIME__
 
 #define LAT  0
 #define LON  1
@@ -239,6 +239,7 @@ typedef struct config_t {
     // gps-related stuff
     uint8_t  gps_type;                      // Type of GPS hardware. 0: NMEA 1: UBX 2+ ??
 		float    gps_ins_vel;                   // Crashpilot: Value for complementary filter INS and GPS Velocity
+    float    gps_proj_smooth;               // Smoothes the speed for projecting coordinates (defined by gps_lag). The Speed is based on the "cfg.gps_ins_vel" result
     float    gps_lag;                       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind
     float    gps_phase;                     // Make a phaseshift +-90 Deg max of GPS output
     uint8_t  acc_ins_lpf;                   // ACC lowpass for Acc GPS INS

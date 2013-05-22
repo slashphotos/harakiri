@@ -131,6 +131,7 @@ void GPS_alltime(void){
 	  uint32_t dist;
     int32_t  dir;
     int16_t  speed;
+	  uint8_t  PHoverride;
 	
     if (f.GPS_FIX && GPS_numSat >= 5){                                             // Do gps stuff with at least 5 Sats
 
@@ -152,6 +153,7 @@ void GPS_alltime(void){
             switch (nav_mode) {
 							
 			          case NAV_MODE_POSHOLD:
+								     PHoverride = 0;
 // Will be probably deleted just for testing
 								    if (cfg.gps_phmove_speed != 0){                                // Do PH MOVE SHIT
 											  PHcompletelySettled = true;                                // This is always true with phmove
@@ -168,8 +170,12 @@ void GPS_alltime(void){
 // Will be probably deleted just for testing
 
 										if (cfg.gps_phmove_speed == 0){                                // This is not done with "else" because the part above will probably be removed
-                        if (RCDeadband(rcCommand[PITCH], cfg.phdeadband) !=0 || RCDeadband(rcCommand[ROLL], cfg.phdeadband) !=0)
+                        if (RCDeadband(rcCommand[PITCH], cfg.phdeadband) !=0 || RCDeadband(rcCommand[ROLL], cfg.phdeadband) !=0){
 												    PHcompletelySettled = false;
+                            GPS_WP[LON]         = GPS_coord[LON];                  // To think about the original APM controller
+                            GPS_WP[LAT]         = GPS_coord[LAT];					         // To think about the original APM controller
+                            PHoverride          = 1;
+												}
 
 										    if (!PHcompletelySettled && INSTotalSpeed < cfg.gps_ph_settlespeed && phsettletimer == 0){
 											    phsettletimer = currentTime + ((uint32_t)cfg.gps_ph_settletime * 1000);
@@ -182,10 +188,13 @@ void GPS_alltime(void){
 												}
  									  }
 
-	                  GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_WP[LAT], &GPS_WP[LON], &wp_distance, &target_bearing); // Probably unneccessary here, just for compatibility
                     GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
  				            if (cfg.gps_ph_apm == 0) GPS_calc_posholdCrashpilot(PHcompletelySettled); // Only use absolute Position if copter settled, otherwise do relative PH (just brake)
 							       else GPS_calc_posholdAPM();
+										if (PHoverride == 1){                                                     // This is done so no influence of PH during move
+										    nav[0] = 0;                                                           // but let the PID Controllers run in the Background, just testing
+											  nav[1] = 0;											
+										}
                 break;
 
 						    case NAV_MODE_CIRCLE:
@@ -278,6 +287,7 @@ void GPS_NewData(uint16_t c){             // Called by uart2Init interrupt
 static void GPS_calc_velocity(void){                                                // actual_speed[GPS_Y] y_GPS_speed positve = Up (NORTH) // actual_speed[GPS_X] x_GPS_speed positve = Right (EAST)
     static int32_t  Last_Real_GPS_coord[2];
 	  static uint32_t LastTimestampNewGPSdata;
+	  static float    SmoothActualSpeed[2];
 	  static float    LagCompensation[2];
 	  static float    GPSmovementAdder[2];
 	  static bool     INSusable;
@@ -305,7 +315,9 @@ static void GPS_calc_velocity(void){                                            
             for (i = 0; i < 2; i++){
 					      Last_Real_GPS_coord[i] = Real_GPS_coord[i];
 		            actual_speed[i]        = actual_speed[i] * cfg.gps_ins_vel + Real_GPS_speed[i] * (1.0f - cfg.gps_ins_vel); // CF: GPS Correction
-						    LagCompensation[i]     = actual_speed[i] * cfg.gps_lag * OneCmTo[i];
+                if (cfg.gps_proj_smooth == 0.0f) SmoothActualSpeed[i] = actual_speed[i];
+								 else SmoothActualSpeed[i] = SmoothActualSpeed[i] * cfg.gps_proj_smooth + actual_speed[i] * (1.0f - cfg.gps_proj_smooth);
+							  LagCompensation[i]     = SmoothActualSpeed[i] * cfg.gps_lag * OneCmTo[i];
 						    GPSmovementAdder[i]    = 0;
 				    }
 				}
@@ -316,7 +328,7 @@ static void GPS_calc_velocity(void){                                            
 			      GPSmovementAdder[i] = GPSmovementAdder[i] + (actual_speed[i]   * ACCDeltaTimeINS * OneCmTo[i]);
             GPS_coord[i]        = Real_GPS_coord[i]   + LagCompensation[i] + GPSmovementAdder[i];
 				}
-				INSTotalSpeed = sqrtf(actual_speed[LAT] * actual_speed[LAT] + actual_speed[LON] * actual_speed[LON]);
+				INSTotalSpeed = sqrtf(SmoothActualSpeed[LAT] * SmoothActualSpeed[LAT] + SmoothActualSpeed[LON] * SmoothActualSpeed[LON]); // This is better than GPS speed because we only want XY and not XYZ Speed
 		} else {
 			  GPS_reset_nav();                                                            // Ins is fucked, reset stuff
 				INSTotalSpeed = 0;                                                          // Reset the Rest
@@ -324,6 +336,7 @@ static void GPS_calc_velocity(void){                                            
             GPS_coord[i]           = Real_GPS_coord[i];
 			      Last_Real_GPS_coord[i] = Real_GPS_coord[i];
             actual_speed[i]        = 0;
+            SmoothActualSpeed[i]   = 0;					
 					  LagCompensation[i]     = 0;
 					  GPSmovementAdder[i]    = 0;
 		    }

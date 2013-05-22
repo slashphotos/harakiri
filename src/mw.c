@@ -295,7 +295,7 @@ void annexCode(void)                                 // Crashpilot: execute in c
 
 uint16_t pwmReadRawRC(uint8_t chan){
     uint16_t data;
-    if (chan > 3) data = pwmRead(chan);
+    if (chan > 7) data = pwmRead(chan);
      else data = pwmRead(cfg.rcmap[chan]);
 	  if (data < 750 || data > 2250) data = cfg.midrc;
     return data;
@@ -705,7 +705,10 @@ void loop(void){
 		if (sensors(SENSOR_BARO)) {
         if (rcOptions[BOXBARO]) {
  		        if (((rcData[THROTTLE]) < cfg.mincheck) && AutolandState == 0) AutolandState = 1; // Start Autoland
-		        if (((rcData[THROTTLE]) > cfg.mincheck) && AutolandState != 0) AutolandState = 0; // Stop Autoland on Userinput
+		        if (((rcData[THROTTLE]) > cfg.mincheck) && AutolandState != 0){
+						    AutolandState = 0;                   // Autolandus interruptus on Userinput
+							  f.BARO_MODE = 0;                     // Reset Barostuff i.e wait for Stickcenter again
+						}
             if (!f.BARO_MODE) {
                 f.BARO_MODE         = 1;
                 AltHold             = EstAlt;
@@ -813,7 +816,7 @@ void loop(void){
 			 }
 #endif
         computeIMU();                                       // Measure loop rate just afer reading the sensors MOVED CRASHPILOT
-//#ifdef MPU6050_DMP mpu6050DmpLoop(); #endif
+
 #ifdef MAG
         if (sensors(SENSOR_MAG)) {
 					  float magP;
@@ -883,7 +886,7 @@ void loop(void){
 							  Althightchange = 0;
 						}
         }                                                                                                                     // End of X Hz Loop
-        AltHold = AltHold8 >> 3;
+        AltHold = AltHold8 >> 3;                                                                                              // Althold8 is remanent from my mwii project, will be replaced
         rcCommand[THROTTLE] = constrain(initialThrottleHold + BaroP + BaroD - BaroI,cfg.minthrottle,cfg.maxthrottle);
         LastAltThrottle = rcCommand[THROTTLE];
 	  }
