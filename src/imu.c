@@ -1,7 +1,8 @@
 #include "board.h"
 #include "mw.h"
 
-int16_t         gyroADC[3], accADC[3], accSmooth[3], magADC[3];
+int16_t         gyroADC[3], accADC[3], accSmooth[3];
+float           magADCfloat[3];
 int16_t         acc_25deg = 0;
 int32_t         BaroAlt;
 int16_t         sonarAlt;         // to think about the unit
@@ -247,7 +248,7 @@ static void getEstimatedAttitude(void){
             EstG.A[axis] = (EstG.A[axis] * (float)cfg.gyro_cmpf_factor + accSmooth[axis]) * INV_GYR_CMPF_FACTOR;
     }
 
-    if (sensors(SENSOR_MAG)) for (axis = 0; axis < 3; axis++) EstM.A[axis] = (EstM.A[axis] * GYR_CMPFM_FACTOR + magADC[axis]) * INV_GYR_CMPFM_FACTOR;
+    if (sensors(SENSOR_MAG)) for (axis = 0; axis < 3; axis++) EstM.A[axis] = (EstM.A[axis] * GYR_CMPFM_FACTOR + magADCfloat[axis]) * INV_GYR_CMPFM_FACTOR;
     angle[ROLL] = _atan2f(EstG.V.X, EstG.V.Z);
     angle[PITCH] = -asinf(EstG.V.Y / -sqrtf(EstG.V.X * EstG.V.X + EstG.V.Y * EstG.V.Y + EstG.V.Z * EstG.V.Z)) * (1800.0f / M_PI) * 1.0227f;   // 1.0227 is an arbitrary value to get 90 Deg, because somehow this suxx
 //    angle[PITCH] = -asinf(EstG.V.Y / -sqrtf(EstG.V.X * EstG.V.X + EstG.V.Y * EstG.V.Y + EstG.V.Z * EstG.V.Z)) * (1800.0f / M_PI);             // This hack removes gimbal lock (sorta) on pitch,
@@ -262,11 +263,11 @@ static void getEstimatedAttitude(void){
     sp        = sinf(pitchRAD);
     TiltValue = cp * cr;                                               // 1.0 is horizontal 0 is vertical, minus is upsidedown
 #ifdef MAG
-    if (sensors(SENSOR_MAG)){
+    if (sensors(SENSOR_MAG) && cfg.mag_calibrated == 1){
         tmp0 = EstM.A[0];                                              // CORRECT MAG TILT COMPENSATION
 			  tmp1 = EstM.A[1];
 			  tmp2 = EstM.A[2];
-			  tmp3 = sqrtf(tmp0 * tmp0 + tmp1 * tmp1 + tmp2 * tmp2);         // Normalize Magvector
+			  tmp3 = sqrtf(tmp0 * tmp0 + tmp1 * tmp1 + tmp2 * tmp2);         // Normalize Magvector maybe cfg.sphere_radius could be taken??
 			  if (tmp3 == 0.0f) tmp3 = 1;
 				tmp0 = tmp0 / tmp3;
 				tmp1 = tmp1 / tmp3;

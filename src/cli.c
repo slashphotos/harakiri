@@ -21,6 +21,7 @@ static void LCDoff(void);
 static void LCDclear(void);
 static void LCDline1(void);
 static void LCDline2(void);
+static void cliScanI2Cbus(char *cmdline);
 
 // from sensors.c
 extern uint8_t batteryCellCount;
@@ -80,6 +81,7 @@ const clicmd_t cmdTable[] = {
     { "map", "mapping of rc channel order", cliMap },
     { "mixer", "mixer name or list", cliMixer },
     { "save", "save and reboot", cliSave },
+    { "scani2cbus", "scan for I2C devices", cliScanI2Cbus }, 
     { "set", "name=value or blank or * for list", cliSet },
     { "status", "show system status", cliStatus },
     { "version", "", cliVersion },
@@ -188,7 +190,6 @@ const clivalue_t valueTable[] = {
     { "gps_baudrate",              VAR_UINT32, &cfg.gps_baudrate,             1200,     115200, 0 },
     { "gps_type",                  VAR_UINT8,  &cfg.gps_type,                    0,          9, 0 },
 		{ "gps_ins_vel",               VAR_FLOAT,  &cfg.gps_ins_vel,                 0,          1, 1 },
-		{ "gps_proj_smooth",           VAR_FLOAT,  &cfg.gps_proj_smooth,             0,     0.999f, 1 },		
 	  { "gps_lag",                   VAR_FLOAT,  &cfg.gps_lag,                     0,         10, 1 },
     { "gps_phase",                 VAR_FLOAT,  &cfg.gps_phase,                 -30,         30, 1 },
 		{ "gps_ph_minsat",             VAR_UINT8,  &cfg.gps_ph_minsat,               5,         10, 1 },
@@ -1189,4 +1190,81 @@ void cliProcess(void)
             uartWrite(c);
         }
     }
+}
+
+// ************************************************************************************************************
+// TestScan on the I2C bus
+// ************************************************************************************************************
+#define MMA8452_ADDRESS       0x1C
+#define HMC5883L_ADDRESS      0x1E  // 0xA
+#define OLED_address          0x3C  // OLED at address 0x3C in 7bit
+#define BMA180_adress         0x64  // don't respond ??
+#define MPU6050_ADDRESS       0x68  // 0x75     or 0x68  0x15
+#define L3G4200D_ADDRESS      0x68  // 0x0f
+#define BMP085_I2C_ADDR       0x77  // 0xD0
+#define MS5611_ADDR           0x77  // 0xA0
+/*
+new May 15 2013 Johannes
+*/
+static void cliScanI2Cbus(char *cmdline)
+{
+    bool    ack;
+	  bool    msbaro = false;
+    uint8_t address;
+    uint8_t nDevices;
+    uint8_t sig;
+    char    buf[20];
+
+  printf("Scanning I2C-Bus for devices ...\r\n");
+
+  nDevices = 0;
+  for(address = 1; address < 127; address++ )
+  {
+      // The i2c_scanner uses the return value of
+      // the Read-Transmisstion to see if
+      // a device did acknowledge to the address.
+		  ack = i2cRead(address, address, 1, &sig);
+		  if (!ack && address == MS5611_ADDR){          // Crashpilot: MS Baro needs special treatment
+				ack = i2cRead(MS5611_ADDR, 0xA0, 1, &sig);
+				msbaro = ack;
+			}
+
+      if (ack) {
+          printf("I2C device found at address 0x");
+          if (address<16) printf("0");
+          printf("%x",address);
+          switch (address) {   
+              case MMA8452_ADDRESS:
+                  strcpy(buf,"MMA8452");
+              break;
+              case HMC5883L_ADDRESS:   
+                  strcpy(buf,"HMC5883L");
+              break;
+              case OLED_address:
+                  strcpy(buf,"OLED");               //i2c_OLED_init();
+              break;
+              case BMA180_adress:
+                  strcpy(buf,"BMA180");
+              break;
+              case MPU6050_ADDRESS:
+                  strcpy(buf,"MPU3050/MPU6050");
+              break;
+            /*case L3G4200D_ADDRESS:
+              strcpy(buf,"L3G4200D");
+               break;*/
+              case BMP085_I2C_ADDR:
+                  if(msbaro) strcpy(buf,"MS5611");
+                   else strcpy(buf,"BMP085");
+              break;
+				      default:                              // Crashpilot: Case unknown
+                  strcpy(buf,"UNKNOWN TO ME");
+					    break;							
+          }
+          printf(" Possible it's %s ?\r\n",buf);
+          nDevices++;
+      }
+     delay(50);
+  }
+  if (nDevices == 0) printf("No I2C devices found\r\n");
+  else printf("Done, %d Devices found\r\n",nDevices);
 }

@@ -9,11 +9,11 @@
 #define HMC58X3_R_CONFA 0
 #define HMC58X3_R_CONFB 1
 #define HMC58X3_R_MODE 2
-#define HMC58X3_X_SELF_TEST_GAUSS (+1.16)       // X axis level when bias current is applied.
-#define HMC58X3_Y_SELF_TEST_GAUSS (+1.16)       // Y axis level when bias current is applied.
-#define HMC58X3_Z_SELF_TEST_GAUSS (+1.08)       // Y axis level when bias current is applied.
-#define SELF_TEST_LOW_LIMIT  (243.0 / 390.0)    // Low limit when gain is 5.
-#define SELF_TEST_HIGH_LIMIT (575.0 / 390.0)    // High limit when gain is 5.
+#define HMC58X3_X_SELF_TEST_GAUSS (+1.16f)       // X axis level when bias current is applied.
+#define HMC58X3_Y_SELF_TEST_GAUSS (+1.16f)       // Y axis level when bias current is applied.
+#define HMC58X3_Z_SELF_TEST_GAUSS (+1.08f)       // Y axis level when bias current is applied.
+#define SELF_TEST_LOW_LIMIT  (243.0f / 390.0f)   // Low limit when gain is 5.
+#define SELF_TEST_HIGH_LIMIT (575.0f / 390.0f)   // High limit when gain is 5.
 #define HMC_POS_BIAS 1
 #define HMC_NEG_BIAS 2
 
@@ -90,9 +90,9 @@ void hmc5883lInit(float *calibrationGain)
         LED1_TOGGLE;
     }
 
-    magGain[0] = fabs(820.0 * HMC58X3_X_SELF_TEST_GAUSS * 2.0 * 10.0 / xyz_total[0]);
-    magGain[1] = fabs(820.0 * HMC58X3_Y_SELF_TEST_GAUSS * 2.0 * 10.0 / xyz_total[1]);
-    magGain[2] = fabs(820.0 * HMC58X3_Z_SELF_TEST_GAUSS * 2.0 * 10.0 / xyz_total[2]);
+    magGain[0] = fabs(820.0 * HMC58X3_X_SELF_TEST_GAUSS * 2.0f * 10.0f / (float)xyz_total[0]);
+    magGain[1] = fabs(820.0 * HMC58X3_Y_SELF_TEST_GAUSS * 2.0f * 10.0f / (float)xyz_total[1]);
+    magGain[2] = fabs(820.0 * HMC58X3_Z_SELF_TEST_GAUSS * 2.0f * 10.0f / (float)xyz_total[2]);
 
     // leave test mode
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFA, 0x70);   // Configuration Register A  -- 0 11 100 00  num samples: 8 ; output rate: 15Hz ; normal measurement mode
@@ -101,9 +101,9 @@ void hmc5883lInit(float *calibrationGain)
     delay(100);
 
     if (!bret) {                // Something went wrong so get a best guess
-        magGain[0] = 1.0;
-        magGain[1] = 1.0;
-        magGain[2] = 1.0;
+        magGain[0] = 1.0f;
+        magGain[1] = 1.0f;
+        magGain[2] = 1.0f;
     }
 
     // if parameter was passed, give calibration values back

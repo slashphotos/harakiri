@@ -253,7 +253,7 @@ static void evaluateCommand(void)
 		if (!feature(FEATURE_PASS)){                              // Just Do the normal stuff
 		    for (i = 0; i < 3; i++) serialize16(accSmooth[i]);
 		    for (i = 0; i < 3; i++) serialize16(gyroData[i]);
-		    for (i = 0; i < 3; i++) serialize16(magADC[i]);
+		    for (i = 0; i < 3; i++) serialize16((int16_t)magADCfloat[i]);
 		} else {                                                  // Just serialize unfiltered AccZ for Balancing
 		    for (i = 0; i < 2; i++) serialize16(0);
         serialize16(accADC[YAW] - acc_1G);                    // Put accz into the middle

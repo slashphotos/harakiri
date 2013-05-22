@@ -449,16 +449,10 @@ void Sonar_update(void)
 // Rearranged & Extended by Crashpilot
 static bool Mag_Calibration(uint8_t oldstyle);
 static int sphere_fit_least_squares(const float x[], const float y[], const float z[], uint16_t size, uint16_t max_iterations, float delta, float *sphere_x, float *sphere_y, float *sphere_z, float *sphere_radius);
-//16 BIT PATH: static int  sphere_fit_least_squares(const int16_t x[], const int16_t y[], const int16_t z[], uint16_t size, uint16_t max_iterations, float delta, float *sphere_x, float *sphere_y, float *sphere_z, float *sphere_radius);
 
 static float   magCal[3] = { 1.0, 1.0, 1.0 };                     // gain for each axis, populated at sensor init
 static uint8_t magInit = 0;
 static uint8_t calibstyle = 0;
-
-static void Mag_getRawADC(void){
-    hmc5883lRead(magADC);
-    alignSensors(ALIGN_MAG, magADC);
-}
 
 void Mag_init(void){                                              // initialize and calibration. turn on led during mag calibration (calibration routine blinks it)
     LD1_ON();
@@ -468,201 +462,114 @@ void Mag_init(void){                                              // initialize 
 	  calibstyle = cfg.mag_oldcalib;                                // if 1 then the old hardironstuff is executed, its also a fallback
 }
 
+static void Mag_getRawADC(void){
+    int16_t magADC[3];
+    uint8_t i;
+	  hmc5883lRead(magADC);
+    alignSensors(ALIGN_MAG, magADC);
+		for (i = 0; i < 3; i++) magADCfloat[i] = (float)magADC[i];
+}
+
 int Mag_getADC(void){
     static uint32_t TenHzTimer = 0;
 	  uint8_t         i;
 	  uint32_t        TimeNow = micros();
 
-    if (TimeNow < TenHzTimer) return 0;                           // each read is spaced by 100ms. Signalize nothing was done with 0
+	  if (TimeNow < TenHzTimer) return 0;                           // each read is spaced by 100ms. Signalize nothing was done with 0
     TenHzTimer = TimeNow + 100000;
 
+  	Mag_getRawADC();                                              // Read mag sensor with correct orientation do nothing more for now	
+
 	  if (f.CALIBRATE_MAG) magInit = 0;                             // Dont use wrong BIAS because we are asked to calibrate that
-    Mag_getRawADC();                                              // Read mag sensor with correct orientation
-    
-    if (magInit == 1) {                                           // we apply scale/bias if calib is done
+
+	  if (magInit == 1) {                                           // we apply scale & bias if calib is done
 	      for (i = 0; i < 3; i++){
-					magADC[i]   = magADC[i] * magCal[i];                    // Adjust Mag readout by GAIN/SCALE
-          magADC[i]  -= cfg.magZero[i];                           // AND by BIAS
+					magADCfloat[i]   = magADCfloat[i] * magCal[i];          // Adjust Mag readout by GAIN/SCALE
+          magADCfloat[i]  -= cfg.magZero[i];                      // AND by BIAS
 				}
     } else {                                                      // Lets calibrate
 		    if (Mag_Calibration(calibstyle)){                         // Do the calib in different fashions old(hard iron) or new(Extended)
-            writeParams(1);                                       // Calibration done save result
+            cfg.mag_calibrated = 1;                               // Supress crazymag in gui if not calibrated at all
+					  writeParams(1);                                       // Calibration done save new Bias
 					  magInit = 1;                                          // Use bias again on next run
 			  }
 		}
-    return 1;                                                     // Signalize something was done with 1
+    return 1;                                                     // Signalize something was done with 1, nobody needs that but we do it..
 }
 
 bool Mag_Calibration(uint8_t oldstyle){                           // Called from 10Hz loop normally....
     #define maxcount 500                                          // Take 500 samples at 10Hz rate i.e 50Sec
 	  #define error    10000
-	  static int16_t  magZeroTempMin[3];                            // Mag Hard Iron Stuff
-    static int16_t  magZeroTempMax[3];                            // Mag Hard Iron Stuff
+	  static float    magZeroTempMin[3];                            // Mag Hard Iron Stuff
+    static float    magZeroTempMax[3];                            // Mag Hard Iron Stuff
 	  static uint32_t MagCalTimeout = 0;
-	  float           sphere_x, sphere_y, sphere_z, sphere_radius;  // Mag Extended Stuff
-		float           magADCfloat[3];                               // Mag Extended Stuff Omit it in 16Bit Path
-    float           x[maxcount],y[maxcount],z[maxcount];          // Mag Extended Stuff
-//16 BIT PATH: int16_t         x[maxcount],y[maxcount],z[maxcount];
     uint8_t         i;
-  	uint16_t        ValIDX;
-    uint32_t        TimeNow = micros();
     bool            CalibrationStatus = false;	                  // This MUST BE here
 	
     if (f.CALIBRATE_MAG){                                         // Init stuff here
         if (oldstyle == 1){
 			      for (i = 0; i < 3; i++){
-					      magADC[i] = magADC[i] * magCal[i];                // Adjust Mag readout JUST by GAIN/SCALE					
-                magZeroTempMin[i] = magADC[i];                    // Reset mag extremes
-                magZeroTempMax[i] = magADC[i];
+					      magADCfloat[i]    = magADCfloat[i] * magCal[i];   // Adjust Mag readout JUST by GAIN/SCALE					
+                magZeroTempMin[i] = magADCfloat[i];               // Reset mag extremes why not just 0??
+                magZeroTempMax[i] = magADCfloat[i];
             }
-            MagCalTimeout = TimeNow + cycleTime + 60000000;       // Timeout for old style.
-		    } else MagCalTimeout = 0;                                 // Abuse MagCalTimeout as 10Hz looptimeout
+            MagCalTimeout = currentTime + cycleTime + 60000000;   // Timeout for old style.
+		    }
 	      f.CALIBRATE_MAG = 0;                                      // Signalize init done, calibration on next run
 				return CalibrationStatus;                                 // Stop here for now. Keep it running on next call
 		}
 
-    switch (oldstyle){
-		    case 0:                                                   // This is the new Extended calibration it will stop the FC from responding
-    		    ValIDX = 0;                                           // Loopcounter					 					
-				    while (ValIDX < maxcount){                            // Gather up Mag Data. Freeze flightcontrol
-                TimeNow = micros();
-								if (TimeNow >= MagCalTimeout){                    // 10 Hz loop
-								    MagCalTimeout = TimeNow + 100000;
-										LED0_TOGGLE;
-									  Mag_getRawADC();                              // Read mag sensor with correct orientation
-	                  for (i = 0; i < 3; i++) magADCfloat[i] = (float)magADC[i] * magCal[i];// Adjust Mag readout JUST by GAIN/SCALE
-										x[ValIDX] = magADCfloat[0];                   // Pretend dump 0=x,1=y,2=z the sphere doesnt care if we keep it up this way
-										y[ValIDX] = magADCfloat[1];
-                    z[ValIDX] = magADCfloat[2];
-/*
-//16 BIT PATH: 									
-	                  for (i = 0; i < 3; i++) magADC[i] = magADC[i] * magCal[i];// Adjust Mag readout JUST by GAIN/SCALE
-										x[ValIDX] = magADC[0];                        // Pretend dump 0=x,1=y,2=z the sphere doesnt care if we keep it up this way
-										y[ValIDX] = magADC[1];
-                    z[ValIDX] = magADC[2];									
-*/									
-										ValIDX++;
-								}                                                 // 10 Hz loop END
-            }                                                     // End of while freeze
-            sphere_fit_least_squares(x, y, z, maxcount, 100, 0.0f, &sphere_x, &sphere_y, &sphere_z, &sphere_radius);
-						if (sphere_x > error || sphere_y > error || sphere_z > error){
-				        debug[0] = 999;                                   // Print out the other number of the beast in debug 0
-				        calibstyle = 1;                                   // Do the old stuff on the next run, that works in any case
-	              f.CALIBRATE_MAG = 1;                              // Restart the opera
-                for (i = 0; i < 3; i++) cfg.magZero[i] = 0;       // Set offsets to zero on error, just for debugging
-						} else {                                              // Happy End
-                cfg.magZero[0] = sphere_x;
-						    cfg.magZero[1] = sphere_y;
-							  cfg.magZero[2] = sphere_z;                        // What do we make of sphere_radius?? Anything??
+		if (oldstyle == 0){                                           // Do the new extended stuff
+        float    x[maxcount], y[maxcount], z[maxcount];
+	      float    sphere_x, sphere_y, sphere_z, sphere_radius;
+			  uint16_t ValIDX = 0;
+        uint32_t TimeNow;
+			  MagCalTimeout = 0;                                        // Abuse MagCalTimeout as 10Hz looptimeout
+				while (ValIDX < maxcount){                                // Gather up Mag Data. Freeze flightcontrol
+            TimeNow = micros();
+						if (TimeNow >= MagCalTimeout){                        // 10 Hz loop
+						    MagCalTimeout = TimeNow + 100000;
+								LED0_TOGGLE;
+								Mag_getRawADC();                                  // Read mag sensor with correct orientation
+								x[ValIDX] = magADCfloat[0] * magCal[0];           // Pretend dump 0=x,1=y,2=z the sphere doesnt care if we keep it up this way
+								y[ValIDX] = magADCfloat[1] * magCal[1];           // Adjust Mag readout JUST by GAIN/SCALE
+                z[ValIDX] = magADCfloat[2] * magCal[2];
+								ValIDX++;
+						}                                                     // 10 Hz loop END
+        }                                                         // End of while freeze
+        sphere_fit_least_squares(x, y, z, maxcount, 100, 0.0f, &sphere_x, &sphere_y, &sphere_z, &sphere_radius);
+				if (sphere_x > error || sphere_y > error || sphere_z > error){
+				    debug[0] = 999;                                       // Print out the other number of the beast in debug 0
+				    calibstyle = 1;                                       // Do the old stuff on the next run, that works in any case
+            cfg.mag_calibrated = 0;                               // Supress crazymag in gui if not calibrated at all
+					  f.CALIBRATE_MAG = 1;                                  // Restart the opera on the next run with the old style
+				} else {                                                  // Happy End
+            cfg.magZero[0]    = sphere_x;
+					  cfg.magZero[1]    = sphere_y;
+					  cfg.magZero[2]    = sphere_z;
+            cfg.sphere_radius = sphere_radius;                    // What do we make of sphere_radius? Anything? Save it in config, maybe useful later?
+			  		CalibrationStatus = true;
+				}
+
+		} else {                                                      // Here comes somehow the old calibration from mwii/BF
+
+		    if (currentTime < MagCalTimeout){
+				    LED0_TOGGLE;
+            for (i = 0; i < 3; i++) {                             // Gather extremes
+						    magADCfloat[i] = magADCfloat[i] * magCal[i];      // Adjust Mag readout JUST by GAIN/SCALE
+                if (magADCfloat[i] < magZeroTempMin[i]) magZeroTempMin[i] = magADCfloat[i];
+                if (magADCfloat[i] > magZeroTempMax[i]) magZeroTempMax[i] = magADCfloat[i];
+            }
+			  } else {                                                  // Time up. Calculate BIAS now and exit
+                for (i = 0; i < 3; i++) cfg.magZero[i] = (magZeroTempMin[i] + magZeroTempMax[i]) * 0.5f;
+                cfg.sphere_radius = 0;                            // No sphere_radius here
 							  CalibrationStatus = true;
-						}
-        break;
-				
-				case 1:                                                   // This is the original hard iron calibration
-				    if (TimeNow < MagCalTimeout){
-				        LED0_TOGGLE;
-                for (i = 0; i < 3; i++) {                         // Gather extremes
-									  magADC[i] = magADC[i] * magCal[i];            // Adjust Mag readout JUST by GAIN/SCALE
-                    if (magADC[i] < magZeroTempMin[i]) magZeroTempMin[i] = magADC[i];
-                    if (magADC[i] > magZeroTempMax[i]) magZeroTempMax[i] = magADC[i];
-                }
-			      } else {                                              // Time up. Calculate BIAS now and exit
-                for (i = 0; i < 3; i++) cfg.magZero[i] = (magZeroTempMin[i] + magZeroTempMax[i]) / 2;
-				        CalibrationStatus = true;
-			      }
-        break;					
-    }
-return CalibrationStatus;
-}
+			  }
 
-/*
-Since malloc gives me a compile error, i am using the above stuff, but this here is better
-Make some adjustments, like done in the code above, it may be neccessary, haven't checked it.
-
-bool Mag_Calibration(uint8_t oldstyle){                           // Called from 10Hz loop
-    #define maxcount 500                                          // Take 500 samples at 10Hz rate i.e 50Sec
-	  #define error    10000
-	  static int16_t  magZeroTempMin[3];                            // Mag Hard Iron Stuff
-    static int16_t  magZeroTempMax[3];                            // Mag Hard Iron Stuff
-	  static uint32_t MagCalTimeout = 0;
-	  float           magADCfloat[3];                               // Mag Extended Stuff
-	  float           sphere_x, sphere_y, sphere_z, sphere_radius;  // Mag Extended Stuff
-    float           * x, * y, * z;                                // Mag Extended Stuff
-    uint8_t         i;
-  	uint16_t        ValIDX;
-    uint32_t        TimeNow = micros();
-    bool            CalibrationStatus = false;	                  // This MUST BE here
-	
-    if (f.CALIBRATE_MAG){                                         // Init stuff here
-        if (oldstyle == 1){
-			      for (i = 0; i < 3; i++){
-					      magADC[i] = magADC[i] * magCal[i];                // Adjust Mag readout JUST by GAIN/SCALE					
-                magZeroTempMin[i] = magADC[i];                    // Reset mag extremes
-                magZeroTempMax[i] = magADC[i];
-            }
-            MagCalTimeout = TimeNow + cycleTime + 60000000;       // Timeout for old style.
-		    } else MagCalTimeout = 0;                                 // Abuse MagCalTimeout as 10Hz looptimeout
-	      f.CALIBRATE_MAG = 0;                                      // Signalize init done, calibration on next run
-				return CalibrationStatus;                                 // Stop here for now. Keep it running on next call
 		}
-		
-    switch (oldstyle) {
-		    case 0:                                                   // This is the new Extended calibration it will stop the FC from responding
-            x = (float *)malloc(sizeof(float) * maxcount);        // Alloc mem here around 6KB
-	          y = (float *)malloc(sizeof(float) * maxcount);
-	          z = (float *)malloc(sizeof(float) * maxcount);
-	          if (x == NULL || y == NULL || z == NULL){             // Mem not available? OMG
-						    free (x); free (y); free (z);                     // Free mem that perhaps was allocated already
-							  debug[0] = 666;                                   // Print out the number of the beast in debug 0
-                calibstyle = 1;                                   // Do the old stuff on the next run, that works in any case
-	              f.CALIBRATE_MAG = 1;                              // Restart the opera
-            } else {                                              // Mem OK. Keep on rolling
-							  ValIDX = 0;                                       // Loopcounter
-							  while (ValIDX < maxcount){                        // Gather up Mag Data. Freeze flightcontrol
-                    TimeNow = micros();
-									  if (TimeNow >= MagCalTimeout){                // 10 Hz loop
-								        MagCalTimeout = TimeNow + 100000;
-                        Mag_getRawADC();                          // Read mag sensor with correct orientation
-	                      for (i = 0; i < 3; i++) magADCfloat[i] = (float)magADC[i] * magCal[i];// Adjust Mag readout JUST by GAIN/SCALE
-											  x[ValIDX] = magADCfloat[0];               // Pretend dump 0=x,1=y,2=z perhaps the sphere doesnt care if we keep it up this way
-											  y[ValIDX] = magADCfloat[1];
-                        z[ValIDX] = magADCfloat[2];
-											  ValIDX++;
-												LED0_TOGGLE;
-										}                                             // 10 Hz loop END
-                }                                                 // End of while freeze
-	              sphere_fit_least_squares(x, y, z, maxcount, 100, 0.0f, &sphere_x, &sphere_y, &sphere_z, &sphere_radius);
-						    free (x); free (y); free (z);                     // Free mem now
-								if (sphere_x > error || sphere_y > error || sphere_z > error){
-								    debug[0] = 999;                               // Print out the other number of the beast in debug 0
-				            calibstyle = 1;                               // Do the old stuff on the next run, that works in any case
-	                  f.CALIBRATE_MAG = 1;                          // Restart the opera
-                } else {                                          // Happy End
-                    cfg.magZero[0] = sphere_x;
-								    cfg.magZero[1] = sphere_y;
-								    cfg.magZero[2] = sphere_z;                    // What do we make of sphere_radius?? Anything??
-							      CalibrationStatus = true;
-								}
-						}                                                     // End of successful mem allocation
-        break;
 
-				case 1:                                                   // This is the original hard iron calibration
-				    if (TimeNow < MagCalTimeout){
-				        LED0_TOGGLE;
-                for (i = 0; i < 3; i++) {                         // Gather extremes
-									  magADC[i] = magADC[i] * magCal[i];            // Adjust Mag readout JUST by GAIN/SCALE
-                    if (magADC[i] < magZeroTempMin[i]) magZeroTempMin[i] = magADC[i];
-                    if (magADC[i] > magZeroTempMax[i]) magZeroTempMax[i] = magADC[i];
-                }
-			      } else {                                              // Time up. Calculate BIAS now and exit
-                for (i = 0; i < 3; i++) cfg.magZero[i] = (magZeroTempMin[i] + magZeroTempMax[i]) / 2;
-				        CalibrationStatus = true;
-			      }
-        break;	
-    }
 return CalibrationStatus;
 }
-*/
 
 /****************************************************************************
  *
@@ -700,8 +607,6 @@ return CalibrationStatus;
  * POSSIBILITY OF SUCH DAMAGE.
  *
  ****************************************************************************/
-
-//16 BIT PATH: int sphere_fit_least_squares(const int16_t x[], const int16_t y[], const int16_t z[], uint16_t size, uint16_t max_iterations, float delta, float *sphere_x, float *sphere_y, float *sphere_z, float *sphere_radius){ // reduced to 16bit
 int sphere_fit_least_squares(const float x[], const float y[], const float z[], uint16_t size, uint16_t max_iterations, float delta, float *sphere_x, float *sphere_y, float *sphere_z, float *sphere_radius){
   uint16_t i;
 	float x_sumplain = 0.0f;
@@ -723,34 +628,6 @@ int sphere_fit_least_squares(const float x[], const float y[], const float z[], 
 	float z2x_sum    = 0.0f;
 	float z2y_sum    = 0.0f;
 
-/*
-//16 BIT PATH: 
-	for (i = 0; i < size; i++) {
-		float x2    = (float)x[i] * (float)x[i];
-		float y2    = (float)y[i] * (float)y[i];
-		float z2    = (float)z[i] * (float)z[i];
-		x_sumplain += (float)x[i];
-		x_sumsq    +=          x2;
-		x_sumcube  +=          x2 * (float)x[i];
-		y_sumplain += (float)y[i];
-		y_sumsq    +=          y2;
-		y_sumcube  +=          y2 * (float)y[i];
-		z_sumplain += (float)z[i];
-		z_sumsq    +=          z2;
-		z_sumcube  +=          z2 * (float)z[i];
-		xy_sum     += (float)x[i] * (float)y[i];
-		xz_sum     += (float)x[i] * (float)z[i];
-		yz_sum     += (float)y[i] * (float)z[i];
-		x2y_sum    +=          x2 * (float)y[i];
-		x2z_sum    +=          x2 * (float)z[i];
-		y2x_sum    +=          y2 * (float)x[i];
-		y2z_sum    +=          y2 * (float)z[i];
-		z2x_sum    +=          z2 * (float)x[i];
-		z2y_sum    +=          z2 * (float)y[i];
-	}
-*/
-
-// That is the original float path
  for (i = 0; i < size; i++) {
 		float x2 = x[i] * x[i];
 		float y2 = y[i] * y[i];
@@ -886,52 +763,3 @@ int sphere_fit_least_squares(const float x[], const float y[], const float z[], 
 	return 0;
 }
 #endif
-
-/*
-ORIGINAL BF
-
-int Mag_getADC(void){
-    static uint32_t t, tCal = 0;
-    static int16_t magZeroTempMin[3];
-    static int16_t magZeroTempMax[3];
-    uint32_t axis;
-
-    if ((int32_t)(currentTime - t) < 0) return 0;                 // each read is spaced by 100ms
-    t = currentTime + 100000;
-    Mag_getRawADC();                                              // Read mag sensor
-    magADC[ROLL]  = magADC[ROLL]  * magCal[ROLL];                 // Adjust Mag readout by GAIN
-    magADC[PITCH] = magADC[PITCH] * magCal[PITCH];
-    magADC[YAW]   = magADC[YAW]   * magCal[YAW];
-
-    if (f.CALIBRATE_MAG) {
-        tCal = t;
-        for (axis = 0; axis < 3; axis++) {
-            cfg.magZero[axis]    = 0;
-            magZeroTempMin[axis] = magADC[axis];
-            magZeroTempMax[axis] = magADC[axis];
-        }
-        f.CALIBRATE_MAG = 0;
-    }
-
-    if (magInit) {                                                // we apply offset only once mag calibration is done
-        magADC[ROLL]  -= cfg.magZero[ROLL];                       // Adjust Mag readout by BIAS
-        magADC[PITCH] -= cfg.magZero[PITCH];
-        magADC[YAW]   -= cfg.magZero[YAW];
-    }
-
-    if (tCal != 0) {
-        if ((t - tCal) < 60000000) {                             // 60s: you have 60s to turn the multi in all directions
-            LED0_TOGGLE;
-            for (axis = 0; axis < 3; axis++) {
-                if (magADC[axis] < magZeroTempMin[axis]) magZeroTempMin[axis] = magADC[axis];
-                if (magADC[axis] > magZeroTempMax[axis]) magZeroTempMax[axis] = magADC[axis];
-            }
-        } else {
-            tCal = 0;
-            for (axis = 0; axis < 3; axis++) cfg.magZero[axis] = (magZeroTempMin[axis] + magZeroTempMax[axis]) / 2; // Crashpilot: Calculate offsets i.e "magBias"
-            writeParams(1);
-        }
-    }
-    return 1;
-}
-*/

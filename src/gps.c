@@ -131,7 +131,6 @@ void GPS_alltime(void){
 	  uint32_t dist;
     int32_t  dir;
     int16_t  speed;
-	  uint8_t  PHoverride;
 	
     if (f.GPS_FIX && GPS_numSat >= 5){                                             // Do gps stuff with at least 5 Sats
 
@@ -153,7 +152,6 @@ void GPS_alltime(void){
             switch (nav_mode) {
 							
 			          case NAV_MODE_POSHOLD:
-								     PHoverride = 0;
 // Will be probably deleted just for testing
 								    if (cfg.gps_phmove_speed != 0){                                // Do PH MOVE SHIT
 											  PHcompletelySettled = true;                                // This is always true with phmove
@@ -174,13 +172,13 @@ void GPS_alltime(void){
 												    PHcompletelySettled = false;
                             GPS_WP[LON]         = GPS_coord[LON];                  // To think about the original APM controller
                             GPS_WP[LAT]         = GPS_coord[LAT];					         // To think about the original APM controller
-                            PHoverride          = 1;
-												}
+												} else phsettletimer = 0;
 
-										    if (!PHcompletelySettled && INSTotalSpeed < cfg.gps_ph_settlespeed && phsettletimer == 0){
+										    if (!PHcompletelySettled && INSTotalSpeed < cfg.gps_ph_settlespeed && phsettletimer == 0)
 											    phsettletimer = currentTime + ((uint32_t)cfg.gps_ph_settletime * 1000);
-										    } else phsettletimer = 0;
 
+												if (INSTotalSpeed > cfg.gps_ph_settlespeed && phsettletimer != 0) phsettletimer = 0;
+												
 										    if (!PHcompletelySettled && phsettletimer != 0 && currentTime >= phsettletimer){
 												    PHcompletelySettled = true;
                             GPS_WP[LON] = GPS_coord[LON];
@@ -189,12 +187,8 @@ void GPS_alltime(void){
  									  }
 
                     GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
- 				            if (cfg.gps_ph_apm == 0) GPS_calc_posholdCrashpilot(PHcompletelySettled); // Only use absolute Position if copter settled, otherwise do relative PH (just brake)
+ 				            if (cfg.gps_ph_apm == 0) GPS_calc_posholdCrashpilot(PHcompletelySettled);   // Only use absolute Position if copter settled, otherwise do relative PH (just brake)
 							       else GPS_calc_posholdAPM();
-										if (PHoverride == 1){                                                     // This is done so no influence of PH during move
-										    nav[0] = 0;                                                           // but let the PID Controllers run in the Background, just testing
-											  nav[1] = 0;											
-										}
                 break;
 
 						    case NAV_MODE_CIRCLE:
@@ -239,9 +233,9 @@ void GPS_NewData(uint16_t c){             // Called by uart2Init interrupt
 		uint8_t  maxsortidx;                  // Crashpilot Spikefilter
 	
     if (GPS_newFrame(c)) {
-        if (GPS_update == 1) GPS_update = 0; // Some strange telemetry shit
+        if (GPS_update == 1) GPS_update = 0; // Some strange telemetry shit, kept here for compatib.
          else GPS_update = 1;
-			  extmp = Real_GPS_coord[LAT];      //  Crashpilot Spikefilter: Do it with every GPS Data only use when less 7 sats
+			  extmp = Real_GPS_coord[LAT];      //  Crashpilot Spikefilter: Do it with every GPS Data only use when less 6 sats
         LatSpikeTab[4] = extmp;
         LatSpikeTab[0] = extmp;
         extmp = Real_GPS_coord[LON];
@@ -265,19 +259,18 @@ void GPS_NewData(uint16_t c){             // Called by uart2Init interrupt
              }
             maxsortidx --;
         }
-				if(!f.GPS_FIX){                                                    // Don't fill spikefilter with pure shit
-			      for (sortidx = 0; sortidx < 5; sortidx++) {                    // Abuse sortidx and clear filter
+				if(!f.GPS_FIX){                                                        // Don't fill spikefilter with pure shit
+			      for (sortidx = 0; sortidx < 5; sortidx++) {                        // Abuse sortidx and clear filter
 		            LatSpikeTab[sortidx] = 0;
                 LonSpikeTab[sortidx] = 0;
 		        }
-				}
-        if (GPS_numSat < 7){                                               // Use Spikefiltervalues with less than 7 Sats
-            if (LatSpikeTab[2] != 0 && LonSpikeTab[2] != 0){               // Use filtervalues if they are not zero
+				} else {                                                               // We have a fix. Can and shall we use Spikefiltervalues?
+            if (GPS_numSat < 6 && LatSpikeTab[2] != 0 && LonSpikeTab[2] != 0){ // Use filtervalues if they are not zero and needed (below 6 Sats)
 						    Real_GPS_coord[LAT] = LatSpikeTab[2];
                 Real_GPS_coord[LON] = LonSpikeTab[2];
-						}
-				}
-        TimestampNewGPSdata = millis();                                    // Set time of Data arrival in MS
+				    }
+			  }
+        TimestampNewGPSdata = millis();                                        // Set timestamp of Data arrival in MS
     }
 }
 
@@ -287,7 +280,6 @@ void GPS_NewData(uint16_t c){             // Called by uart2Init interrupt
 static void GPS_calc_velocity(void){                                                // actual_speed[GPS_Y] y_GPS_speed positve = Up (NORTH) // actual_speed[GPS_X] x_GPS_speed positve = Right (EAST)
     static int32_t  Last_Real_GPS_coord[2];
 	  static uint32_t LastTimestampNewGPSdata;
-	  static float    SmoothActualSpeed[2];
 	  static float    LagCompensation[2];
 	  static float    GPSmovementAdder[2];
 	  static bool     INSusable;
@@ -299,13 +291,11 @@ static void GPS_calc_velocity(void){                                            
 	  if (CosLatScaleLon == 0.0f) GPS_calc_longitude_scaling();                       // Init CosLatScaleLon if not already done to avoid div by zero etc..
     RealGPSDeltaTime = TimestampNewGPSdata - LastTimestampNewGPSdata;               // RealGPSDeltaTime in ms! NOT us!
 	  LastTimestampNewGPSdata = TimestampNewGPSdata;
-	  if (RealGPSDeltaTime != 0)                                                      // New GPS Data?
-		{
-        INSusable = false;                                                          // Set INS to ununsable
-			  if (RealGPSDeltaTime < 400)                                                 // In Time? 2,5Hz-XXHz
-				{
+	  if (RealGPSDeltaTime != 0){                                                     // New GPS Data?
+        INSusable = false;                                                          // Set INS to ununsable in advance we will see later
+			  if (RealGPSDeltaTime < 400){                                                // In Time? 2,5Hz-XXHz
 					  INSusable = true;                                                       // INS is alive
-					  gpsHz = 1000.0f/(float)RealGPSDeltaTime;                                // Set it, try to filter below
+					  gpsHz = 1000.0f/(float)RealGPSDeltaTime;                                // Set GPS Hz, try to filter below
 					  if (RealGPSDeltaTime >  80 && RealGPSDeltaTime < 120) gpsHz = 10.0f;    // 10Hz Data 100ms filter out timejitter
 					  if (RealGPSDeltaTime > 180 && RealGPSDeltaTime < 220) gpsHz = 5.0f;     //  5Hz Data 200ms
 					  if (RealGPSDeltaTime > 230 && RealGPSDeltaTime < 270) gpsHz = 4.0f;     //  4Hz Data 250ms
@@ -315,28 +305,25 @@ static void GPS_calc_velocity(void){                                            
             for (i = 0; i < 2; i++){
 					      Last_Real_GPS_coord[i] = Real_GPS_coord[i];
 		            actual_speed[i]        = actual_speed[i] * cfg.gps_ins_vel + Real_GPS_speed[i] * (1.0f - cfg.gps_ins_vel); // CF: GPS Correction
-                if (cfg.gps_proj_smooth == 0.0f) SmoothActualSpeed[i] = actual_speed[i];
-								 else SmoothActualSpeed[i] = SmoothActualSpeed[i] * cfg.gps_proj_smooth + actual_speed[i] * (1.0f - cfg.gps_proj_smooth);
-							  LagCompensation[i]     = SmoothActualSpeed[i] * cfg.gps_lag * OneCmTo[i];
-						    GPSmovementAdder[i]    = 0;
+							  LagCompensation[i]     = actual_speed[i] * cfg.gps_lag * OneCmTo[i];// LagComp[LAT/LON] in their own "Tics" scale
+						    GPSmovementAdder[i]    = 0;                                         // This float accumulates the tiny acc movements between GPS reads
 				    }
 				}
 		}                                                                               // End of X Hz Loop
 		if ((millis() - TimestampNewGPSdata) > 500) INSusable = false;                  // INS is NOT OK, too long (500ms) no correction
     if (INSusable){
         for (i = 0; i < 2; i++){
-			      GPSmovementAdder[i] = GPSmovementAdder[i] + (actual_speed[i]   * ACCDeltaTimeINS * OneCmTo[i]);
-            GPS_coord[i]        = Real_GPS_coord[i]   + LagCompensation[i] + GPSmovementAdder[i];
+			      GPSmovementAdder[i] += actual_speed[i] * ACCDeltaTimeINS * OneCmTo[i];
+            GPS_coord[i]         = Real_GPS_coord[i] + LagCompensation[i] + GPSmovementAdder[i];
 				}
-				INSTotalSpeed = sqrtf(SmoothActualSpeed[LAT] * SmoothActualSpeed[LAT] + SmoothActualSpeed[LON] * SmoothActualSpeed[LON]); // This is better than GPS speed because we only want XY and not XYZ Speed
+				INSTotalSpeed = sqrtf(actual_speed[LAT] * actual_speed[LAT] + actual_speed[LON] * actual_speed[LON]); // This is better than GPS speed because we only want XY and not XYZ Speed
 		} else {
 			  GPS_reset_nav();                                                            // Ins is fucked, reset stuff
-				INSTotalSpeed = 0;                                                          // Reset the Rest
+				INSTotalSpeed = 0;		                                                    	// Reset the Rest
 			  for (i = 0; i < 2; i++){
             GPS_coord[i]           = Real_GPS_coord[i];
 			      Last_Real_GPS_coord[i] = Real_GPS_coord[i];
-            actual_speed[i]        = 0;
-            SmoothActualSpeed[i]   = 0;					
+            actual_speed[i]        = 0;				
 					  LagCompensation[i]     = 0;
 					  GPSmovementAdder[i]    = 0;
 		    }
@@ -398,7 +385,7 @@ void GPS_set_next_wp(int32_t *lat, int32_t *lon){
 				    PHcompletelySettled = false;
         break;			
 			  case NAV_MODE_RTL:
-			      WP_Fastcorner = false;                                            // This means: Dont break when approaching WP
+			      WP_Fastcorner = false;                                            // This means: Slow down when approaching WP
         break;
         case NAV_MODE_WP:
 		        tmp0 = (float)(WP_Target_Alt - EstAlt);                           // tmp0 = hightdifference in cm.  + is up
@@ -440,9 +427,10 @@ static void GPS_calc_posholdCrashpilot(bool useabsolutepos){
         nav[axis]        = get_P(rate_error[axis],                                 &poshold_ratePID_PARAM) +  //try negative for I? Because it just works like shit
                            get_I(rate_error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
                        d = get_D(rate_error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
-                       d = constrain(d, -2000, 2000);
+        if (abs(actual_speed[axis]) < 50) d = 0;                                   // get rid of noise
+				 else d = constrain(d, -2000, 2000);
     		nav[axis]        = constrain(nav[axis] + d, -maxbank100new, maxbank100new);
-        navPID[axis].integrator = poshold_ratePID[axis].integrator;
+        navPID[axis].integrator = poshold_ratePID[axis].integrator;                // I kept it for compat.
     }
 }
 

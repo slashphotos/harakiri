@@ -154,13 +154,13 @@ static void resetConf(void)
     cfg.D8[PIDALT]                = 80;
 
 
-    cfg.P8[PIDPOS]                = 9;          // FIND YOUR VALUE
+    cfg.P8[PIDPOS]                = 0;          // FIND YOUR VALUE
     cfg.I8[PIDPOS]                = 0;          // NOT USED
     cfg.D8[PIDPOS]                = 0;          // NOT USED
 
-    cfg.P8[PIDPOSR]               = 140;        // FIND YOUR VALUE                    // Controls the speed part with my PH logic
+    cfg.P8[PIDPOSR]               = 0;          // FIND YOUR VALUE                    // Controls the speed part with my PH logic
     cfg.I8[PIDPOSR]               = 0;          // DANGER "I" may lead to circeling   // Controls the speed part with my PH logic
-    cfg.D8[PIDPOSR]               = 50;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
+    cfg.D8[PIDPOSR]               = 0;          // FIND YOUR VALUE                    // Controls the speed part with my PH logic
 
     cfg.P8[PIDNAVR]               = 20;         // Crashpilot: Double the value
     cfg.I8[PIDNAVR]               = 20;         // NAV_I * 100;                       // Scaling/Purpose unchanged
@@ -194,7 +194,7 @@ static void resetConf(void)
 
 //    cfg.mag_declination           = 0;          // For example, -6deg 37min, = -637 Japan, format is [sign]dddmm (degreesminutes) default is zero.
     cfg.mag_declination           = 107;        // Crashpilot //cfg.acc_hardware = ACC_DEFAULT;// default/autodetect
-    cfg.mag_oldcalib              = 0;          // 1 = old hard iron calibration // 0 = extended calibration
+    cfg.mag_oldcalib              = 0;          // 1 = old hard iron calibration // 0 = extended calibration (better)
     cfg.acc_hardware              = 2;          // Crashpilot MPU6050
 		cfg.acc_lpf_factor            = 100;	      // changed 27.11.2012
     cfg.acc_ins_lpf               = 10;         // General LPF for INS
@@ -275,9 +275,8 @@ static void resetConf(void)
     // gps/nav
     cfg.gps_type                  = 1;          // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3, GPS_UBLOX_DUMB = 4
     cfg.gps_baudrate              = 38400;      // Changed 5/3/13 was 115200;
-    cfg.gps_ins_vel               = 0.78f;      // Crashpilot GPS INS The LOWER the value the closer to gps speed // Dont go to high here
-    cfg.gps_proj_smooth           = 0.8f;       // 0 Disables the higher the more smoothing. 1.0 is useless. Smoothes the speed for projecting coordinates (defined by gps_lag). The Speed is based on the "cfg.gps_ins_vel" result
-    cfg.gps_lag                   = 1.5f;       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind, 1.5s is better for ublox on the "bench test"
+    cfg.gps_ins_vel               = 0.72f;      // Crashpilot GPS INS The LOWER the value the closer to gps speed // Dont go to high here
+    cfg.gps_lag                   = 1.0f;       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind, 1.5s is better for ublox on the "bench test"
     cfg.gps_phase                 = 0;          // Make a phaseshift +-90 Deg max of GPS output
     cfg.gps_ph_minsat             = 6;          // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
 		cfg.gps_ph_apm                = 0;          // If 1 the original APM PH Controller is used and original parameter scaling

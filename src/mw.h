@@ -4,7 +4,7 @@
 #define VBATFREQ 6        // to read battery voltage - nth number of loop iterations
 
 #define  VERSION  211
-#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10Beta D " __DATE__ " / " __TIME__
+#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10Beta E " __DATE__ " / " __TIME__
 
 #define LAT  0
 #define LON  1
@@ -150,9 +150,11 @@ typedef struct config_t {
     uint8_t  yawRate;
     uint8_t  dynThrPID;
     int16_t  accZero[3];
-    int16_t  magZero[3];
+    float    magZero[3];
+	  float    sphere_radius;
+	  uint8_t  mag_calibrated;                // Just to supress crazymag in gui display
     int16_t  mag_declination;               // Get your magnetic decliniation from here : http://magnetic-declination.com/
-    uint8_t  mag_oldcalib;                  // use the old hard iron calibration?
+    uint8_t  mag_oldcalib;                  // 1 = old hard iron calibration // 0 = extended calibration (better)		
     int16_t  angleTrim[2];                  // accelerometer trim
     // sensor-related stuff
     int8_t   align[3][3];                   // acc, gyro, mag alignment (ex: with sensor output of X, Y, Z, align of 1 -3 2 would return X, -Z, Y)
@@ -240,7 +242,6 @@ typedef struct config_t {
     // gps-related stuff
     uint8_t  gps_type;                      // Type of GPS hardware. 0: NMEA 1: UBX 2+ ??
 		float    gps_ins_vel;                   // Crashpilot: Value for complementary filter INS and GPS Velocity
-    float    gps_proj_smooth;               // Smoothes the speed for projecting coordinates (defined by gps_lag). The Speed is based on the "cfg.gps_ins_vel" result
     float    gps_lag;                       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind
     float    gps_phase;                     // Make a phaseshift +-90 Deg max of GPS output
     uint8_t  acc_ins_lpf;                   // ACC lowpass for Acc GPS INS
@@ -317,7 +318,8 @@ extern uint16_t failsafeCnt;
 extern float    TiltValue;
 
 extern int16_t  debug[4];
-extern int16_t  gyroADC[3], accADC[3], accSmooth[3], magADC[3];
+extern int16_t  gyroADC[3], accADC[3], accSmooth[3];
+extern float    magADCfloat[3];
 extern uint16_t acc_1G;
 extern uint32_t currentTime;
 extern uint32_t previousTime;
