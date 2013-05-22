@@ -10,13 +10,15 @@ static uint16_t convOverrun = 0;
 // EXTI14 for BMP085 End of Conversion Interrupt
 void EXTI15_10_IRQHandler(void)
 {
-    if (EXTI_GetITStatus(EXTI_Line14) == SET) {
+    if (EXTI_GetITStatus(EXTI_Line14) == SET)
+    {
         EXTI_ClearITPendingBit(EXTI_Line14);
         convDone = true;
     }
 }
 
-typedef struct {
+typedef struct
+{
     int16_t ac1;
     int16_t ac2;
     int16_t ac3;
@@ -30,7 +32,8 @@ typedef struct {
     int16_t md;
 } bmp085_smd500_calibration_param_t;
 
-typedef struct  {
+typedef struct
+{
     bmp085_smd500_calibration_param_t cal_param;
     uint8_t mode;
     uint8_t chip_id, ml_version, al_version;
@@ -47,7 +50,7 @@ typedef struct  {
 #define E_SENSOR_NOT_DETECTED   (char) 0
 #define BMP085_PROM_START__ADDR 0xaa
 #define BMP085_PROM_DATA__LEN   22
-#define BMP085_T_MEASURE        0x2E                // temperature measurent 
+#define BMP085_T_MEASURE        0x2E                // temperature measurent
 #define BMP085_P_MEASURE        0x34                // pressure measurement
 #define BMP085_CTRL_MEAS_REG    0xF4
 #define BMP085_ADC_OUT_MSB_REG  0xF6
@@ -130,12 +133,13 @@ bool bmp085Detect(baro_t *baro)
 //    bmp085.oversampling_setting = 2;                                           // Crashpilot set to high res only
     bmp085.oversampling_setting = 3;                                             // Crashpilot set back to full res
 
-    if (bmp085.chip_id == BMP085_CHIP_ID) {                                      /* get bitslice */
+    if (bmp085.chip_id == BMP085_CHIP_ID)                                        /* get bitslice */
+    {
         i2cRead(BMP085_I2C_ADDR, BMP085_VERSION_REG, 1, &data);                  /* read Version reg */
         bmp085.ml_version = BMP085_GET_BITSLICE(data, BMP085_ML_VERSION);        /* get ML Version */
         bmp085.al_version = BMP085_GET_BITSLICE(data, BMP085_AL_VERSION);        /* get AL Version */
         bmp085_get_cal_param();                                                  /* readout bmp085 calibparam structure */
-			  bmp085InitDone = true;
+        bmp085InitDone = true;
 //        baro->ut_delay = 4500;                                        // Crashpilot OSS 2 TIMINGS
 //        baro->up_delay = 13500;                                       // Crashpilot
 //        baro->repeat_delay = 1;                                       // Crashpilot
@@ -158,7 +162,7 @@ static int16_t bmp085_get_temperature(uint32_t ut)
 {
     int16_t temperature;
     int32_t x1, x2;
-#ifdef BMP_TEMP_OSS    
+#ifdef BMP_TEMP_OSS
     static uint32_t temp;
 #endif
 
@@ -167,7 +171,7 @@ static int16_t bmp085_get_temperature(uint32_t ut)
     bmp085.param_b5 = x1 + x2;
     temperature = ((bmp085.param_b5 + 8) >> 4);  // temperature in 0.1°C
 
-#ifdef BMP_TEMP_OSS    
+#ifdef BMP_TEMP_OSS
     temp *= (1 << BMP_TEMP_OSS) - 1;        // multiply the temperature variable by 3 - we have tau == 1/4
     temp += ((uint32_t)temperature) << 8;   // add on the buffer
     temp >>= BMP_TEMP_OSS;                  // divide by 4
@@ -200,11 +204,14 @@ static int32_t bmp085_get_pressure(uint32_t up)
     x2 = (bmp085.cal_param.b1 * ((b6 * b6) >> 12) ) >> 16;
     x3 = ((x1 + x2) + 2) >> 2;
     b4 = (bmp085.cal_param.ac4 * (uint32_t) (x3 + 32768)) >> 15;
-     
+
     b7 = ((uint32_t)(up - b3) * (50000 >> bmp085.oversampling_setting));
-    if (b7 < 0x80000000) {
+    if (b7 < 0x80000000)
+    {
         pressure = (b7 << 1) / b4;
-    } else { 
+    }
+    else
+    {
         pressure = (b7 / b4) << 1;
     }
 
@@ -225,14 +232,15 @@ static void bmp085_start_ut(void)
 
 static void bmp085_get_ut(void)
 {
-    uint8_t data[2];    
+    uint8_t data[2];
     uint16_t timeout = 10000;
 
     // wait in case of cockup
     if (!convDone)
         convOverrun++;
 #if 0
-    while (!convDone && timeout-- > 0) {
+    while (!convDone && timeout-- > 0)
+    {
         __NOP();
     }
 #endif
@@ -257,12 +265,13 @@ static void bmp085_get_up(void)
 {
     uint8_t data[3];
     uint16_t timeout = 10000;
-    
+
     // wait in case of cockup
     if (!convDone)
         convOverrun++;
 #if 0
-    while (!convDone && timeout-- > 0) {
+    while (!convDone && timeout-- > 0)
+    {
         __NOP();
     }
 #endif

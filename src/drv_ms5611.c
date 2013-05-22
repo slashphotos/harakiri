@@ -31,7 +31,8 @@ static uint32_t ms5611_up;                                       // static resul
 static uint16_t ms5611_c[PROM_NB];                               // on-chip ROM
 static uint8_t  ms5611_osr = CMD_ADC_4096;
 
-bool ms5611Detect(baro_t *baro){
+bool ms5611Detect(baro_t *baro)
+{
     GPIO_InitTypeDef GPIO_InitStructure;
     bool ack = false;
     uint8_t sig,i;
@@ -44,12 +45,12 @@ bool ms5611Detect(baro_t *baro){
     // BMP085 is disabled. If we have a MS5611, it will reply. if no reply, means either we have BMP085 or no baro at all.
     ack = i2cRead(MS5611_ADDR, CMD_PROM_RD, 1, &sig);
     if (!ack) return false;
- 	  delay(50);
-	  for (i = 0; i < 5; i++) ms5611_reset();                      // Reset the damn thing a few times
+    delay(50);
+    for (i = 0; i < 5; i++) ms5611_reset();                      // Reset the damn thing a few times
     for (i = 0; i < PROM_NB; i++) ms5611_c[i] = ms5611_prom(i);  // read all coefficients // read 8 words word:0 = ID; word:1-6 = C1-C6; word:7 = ChkSum
-		if (ms5611_crc(ms5611_c) != 0) return false;                 // check crc, bail out if wrong - we are probably talking to BMP085 w/o XCLR line!
+    if (ms5611_crc(ms5611_c) != 0) return false;                 // check crc, bail out if wrong - we are probably talking to BMP085 w/o XCLR line!
 // 	  baro->ut_delay = 10000; //    baro->up_delay = 10000; //    baro->repeat_delay = 4000;
- 	  baro->ut_delay = 9500;
+    baro->ut_delay = 9500;
     baro->up_delay = 9500;
     baro->repeat_delay = 1;
     baro->start_ut = ms5611_start_ut;
@@ -63,32 +64,38 @@ bool ms5611Detect(baro_t *baro){
     return true;
 }
 
-static void ms5611_reset(void){
+static void ms5611_reset(void)
+{
     i2cWrite(MS5611_ADDR, CMD_RESET, 1);
-	  delayMicroseconds(5000);                                     // Crashpilot delayMicroseconds(2800);
+    delayMicroseconds(5000);                                     // Crashpilot delayMicroseconds(2800);
 }
 
-static uint16_t ms5611_prom(int8_t coef_num){
+static uint16_t ms5611_prom(int8_t coef_num)
+{
     uint8_t rxbuf[2] = { 0, 0 };
     i2cRead(MS5611_ADDR, CMD_PROM_RD + coef_num * 2, 2, rxbuf); // send PROM READ command
     return rxbuf[0] << 8 | rxbuf[1];
 }
 
-static int8_t ms5611_crc(uint16_t *prom){
+static int8_t ms5611_crc(uint16_t *prom)
+{
     int32_t i, j;
     uint32_t res = 0;
     uint8_t zero = 1;
     uint8_t crc = prom[7] & 0xF;
     prom[7] &= 0xFF00;
 
-    for (i = 0; i < 8; i++) {                                   // if eeprom is all zeros, we're probably fucked - BUT this will return valid CRC lol
+    for (i = 0; i < 8; i++)                                     // if eeprom is all zeros, we're probably fucked - BUT this will return valid CRC lol
+    {
         if (prom[i] != 0) zero = 0;
     }
     if (zero) return -1;
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < 16; i++)
+    {
         if (i & 1) res ^= ((prom[i >> 1]) & 0x00FF);
         else res ^= (prom[i >> 1] >> 8);
-        for (j = 8; j > 0; j--) {
+        for (j = 8; j > 0; j--)
+        {
             if (res & 0x8000) res ^= 0x1800;
             res <<= 1;
         }
@@ -98,55 +105,63 @@ static int8_t ms5611_crc(uint16_t *prom){
     return -1;
 }
 
-static uint32_t ms5611_read_adc(void){
+static uint32_t ms5611_read_adc(void)
+{
     uint8_t rxbuf[3];
     i2cRead(MS5611_ADDR, CMD_ADC_READ, 3, rxbuf);                     // read ADC
     return (rxbuf[0] << 16) | (rxbuf[1] << 8) | rxbuf[2];
 }
 
-static void ms5611_start_ut(void){
+static void ms5611_start_ut(void)
+{
     i2cWrite(MS5611_ADDR, CMD_ADC_CONV + CMD_ADC_D2 + ms5611_osr, 1); // D2 (temperature) conversion start!
 }
 
-static void ms5611_get_ut(void){
-	  uint32_t tmp;
+static void ms5611_get_ut(void)
+{
+    uint32_t tmp;
     tmp = ms5611_read_adc();
-	  if (tmp !=0) ms5611_ut = tmp;   // Keep old on error
+    if (tmp !=0) ms5611_ut = tmp;   // Keep old on error
 }
 
-static void ms5611_start_up(void){
+static void ms5611_start_up(void)
+{
     i2cWrite(MS5611_ADDR, CMD_ADC_CONV + CMD_ADC_D1 + ms5611_osr, 1); // D1 (pressure) conversion start!
 }
 
-static void ms5611_get_up(void){
-	  uint32_t tmp;
+static void ms5611_get_up(void)
+{
+    uint32_t tmp;
     tmp = ms5611_read_adc();
-	  if (tmp !=0) ms5611_up = tmp;   // Keep old on error
+    if (tmp !=0) ms5611_up = tmp;   // Keep old on error
 }
 
-static int32_t ms5611_calculate(void){
+static int32_t ms5611_calculate(void)
+{
     int32_t temperature, off2 = 0, sens2 = 0, delt;
     int32_t pressure;
-	  uint32_t C5;                                                   // Crashpilot perhaps better, doesn't harm anyways
+    uint32_t C5;                                                   // Crashpilot perhaps better, doesn't harm anyways
     C5 = ms5611_c[5];                                              // Crashpilot perhaps better, doesn't harm anyways
-	  C5 = C5 << 8;                                                  // Crashpilot perhaps better, doesn't harm anyways
+    C5 = C5 << 8;                                                  // Crashpilot perhaps better, doesn't harm anyways
     int64_t dT  = (int32_t)ms5611_ut - ((int32_t)C5);              // Crashpilot perhaps better, doesn't harm anyways
-	  int64_t off = ((uint32_t)ms5611_c[2] << 16) + ((dT * ms5611_c[4]) >> 7);
+    int64_t off = ((uint32_t)ms5611_c[2] << 16) + ((dT * ms5611_c[4]) >> 7);
     int64_t sens = ((uint32_t)ms5611_c[1] << 15) + ((dT * ms5611_c[3]) >> 8);
     temperature = 2000 + ((dT * ms5611_c[6]) >> 23);
-    if (temperature < 2000) {                                      // temperature lower than 20degC 
+    if (temperature < 2000)                                        // temperature lower than 20degC
+    {
         delt = temperature - 2000;
         delt = delt * delt;
         off2 = (5 * delt) >> 1;
         sens2 = (5 * delt) >> 2;
-        if (temperature < -1500) {                                 // temperature lower than -15degC
+        if (temperature < -1500)                                   // temperature lower than -15degC
+        {
             delt = temperature + 1500;
             delt = delt * delt;
             off2  += 7 * delt;
             sens2 += (11 * delt) >> 1;
         }
     }
-    off  -= off2; 
+    off  -= off2;
     sens -= sens2;
     pressure = (((ms5611_up * sens ) >> 21) - off) >> 15;
     return pressure;
@@ -160,7 +175,7 @@ ms5611_calculate Alternatives
   =======
   int32_t pressure;
   float D1, D2, C1, C2, C3, C4, C5, C6;
-	float dT, TEMP, OFF, OFF2, SENS, SENS2, T2, Aux; 
+	float dT, TEMP, OFF, OFF2, SENS, SENS2, T2, Aux;
 	D1 = ms5611_up;
 	D2 = ms5611_ut;
 	C1 = ms5611_c[1];
@@ -202,8 +217,8 @@ ms5611_calculate Alternatives
 	C6 = (dT * (float)ms5611_c[6]) / 8388608;
 	baroTemperature = 2000 + C6;
   off             = C2 + C4;
-  sens            = C1 + C3;  
-  if (baroTemperature < 2000) { // temperature lower than 20st.C 
+  sens            = C1 + C3;
+  if (baroTemperature < 2000) { // temperature lower than 20st.C
     delt = baroTemperature - 2000;
     delt  = 5 * delt * delt;
     off2  = delt * 0.5f;
@@ -214,7 +229,7 @@ ms5611_calculate Alternatives
       off2  += 7.0f * delt;
       sens2 += 11.0f * delt *0.5f;
     }
-    off  -= off2; 
+    off  -= off2;
     sens -= sens2;
   }
   pressure = (((up * sens ) / 2097152) - off) / 32768;
@@ -233,7 +248,7 @@ ms5611_calculate Alternatives
   int64_t off      = ((uint32_t)ms5611_c[2] <<16) + ((dT * ms5611_c[4]) >> 7);
   int64_t sens     = ((uint32_t)ms5611_c[1] <<15) + ((dT * ms5611_c[3]) >> 8);
 
-  if (baroTemperature < 2000) { // temperature lower than 20st.C 
+  if (baroTemperature < 2000) { // temperature lower than 20st.C
     delt = baroTemperature-2000;
     delt  = 5*delt*delt;
     off2  = delt>>1;
@@ -244,7 +259,7 @@ ms5611_calculate Alternatives
       off2  += 7 * delt;
       sens2 += (11 * delt)>>1;
     }
-    off  -= off2; 
+    off  -= off2;
     sens -= sens2;
   }
   pressure = (((ms5611_up * sens ) >> 21) - off) >> 15;
@@ -261,7 +276,7 @@ ms5611_calculate Alternatives
     int64_t sens = ((uint32_t)ms5611_c[1] << 15) + (((int64_t)dT * ms5611_c[3]) >> 8);
     temperature = 2000 + (((int64_t)dT * ms5611_c[6]) >> 23);
 
-    if (temperature < 2000) { // temperature lower than 20degC 
+    if (temperature < 2000) { // temperature lower than 20degC
         delt = temperature - 2000;
         delt = delt * delt;
         off2 = (5 * delt) >> 1;
@@ -273,7 +288,7 @@ ms5611_calculate Alternatives
             sens2 += (11 * delt) >> 1;
         }
     }
-    off  -= off2; 
+    off  -= off2;
     sens -= sens2;
     pressure = (((ms5611_up * sens ) >> 21) - off) >> 15;
     return pressure; */

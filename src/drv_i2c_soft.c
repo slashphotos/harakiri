@@ -83,7 +83,8 @@ static bool I2C_WaitAck(void)
     I2C_delay();
     SCL_H;
     I2C_delay();
-    if (SDA_read) {
+    if (SDA_read)
+    {
         SCL_L;
         return false;
     }
@@ -94,7 +95,8 @@ static bool I2C_WaitAck(void)
 static void I2C_SendByte(uint8_t byte)
 {
     uint8_t i = 8;
-    while (i--) {
+    while (i--)
+    {
         SCL_L;
         I2C_delay();
         if (byte & 0x80)
@@ -115,13 +117,15 @@ static uint8_t I2C_ReceiveByte(void)
     uint8_t byte = 0;
 
     SDA_H;
-    while (i--) {
+    while (i--)
+    {
         byte <<= 1;
         SCL_L;
         I2C_delay();
         SCL_H;
         I2C_delay();
-        if (SDA_read) {
+        if (SDA_read)
+        {
             byte |= 0x01;
         }
     }
@@ -145,15 +149,18 @@ bool i2cWriteBuffer(uint8_t addr, uint8_t reg, uint8_t len, uint8_t * data)
     if (!I2C_Start())
         return false;
     I2C_SendByte(addr << 1 | I2C_Direction_Transmitter);
-    if (!I2C_WaitAck()) {
+    if (!I2C_WaitAck())
+    {
         I2C_Stop();
         return false;
     }
     I2C_SendByte(reg);
     I2C_WaitAck();
-    for (i = 0; i < len; i++) {
+    for (i = 0; i < len; i++)
+    {
         I2C_SendByte(data[i]);
-        if (!I2C_WaitAck()) {
+        if (!I2C_WaitAck())
+        {
             I2C_Stop();
             return false;
         }
@@ -167,7 +174,8 @@ bool i2cWrite(uint8_t addr, uint8_t reg, uint8_t data)
     if (!I2C_Start())
         return false;
     I2C_SendByte(addr << 1 | I2C_Direction_Transmitter);
-    if (!I2C_WaitAck()) {
+    if (!I2C_WaitAck())
+    {
         I2C_Stop();
         return false;
     }
@@ -184,7 +192,8 @@ bool i2cRead(uint8_t addr, uint8_t reg, uint8_t len, uint8_t *buf)
     if (!I2C_Start())
         return false;
     I2C_SendByte(addr << 1 | I2C_Direction_Transmitter);
-    if (!I2C_WaitAck()) {
+    if (!I2C_WaitAck())
+    {
         I2C_Stop();
         return false;
     }
@@ -193,7 +202,8 @@ bool i2cRead(uint8_t addr, uint8_t reg, uint8_t len, uint8_t *buf)
     I2C_Start();
     I2C_SendByte(addr << 1 | I2C_Direction_Receiver);
     I2C_WaitAck();
-    while (len) {
+    while (len)
+    {
         *buf = I2C_ReceiveByte();
         if (len == 1)
             I2C_NoAck();

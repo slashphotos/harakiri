@@ -20,7 +20,8 @@ void parseRcChannels(const char *input)
 {
     const char *c, *s;
 
-    for (c = input; *c; c++) {
+    for (c = input; *c; c++)
+    {
         s = strchr(rcChannelLetters, *c);
         if (s)
             cfg.rcmap[s - rcChannelLetters] = c - input;
@@ -63,7 +64,8 @@ void readEEPROM(void)
     for (i = 0; i < 6; i++)
         lookupPitchRollRC[i] = (2500 + cfg.rcExpo8 * (i * i - 25)) * i * (int32_t) cfg.rcRate8 / 2500;
 
-    for (i = 0; i < 11; i++) {
+    for (i = 0; i < 11; i++)
+    {
         int16_t tmp = 10 * i - cfg.thrMid8;
         uint8_t y = 1;
         if (tmp > 0)
@@ -98,8 +100,10 @@ void writeParams(uint8_t b)
     FLASH_Unlock();
     FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR);
 
-    if (FLASH_ErasePage(FLASH_WRITE_ADDR) == FLASH_COMPLETE) {
-        for (i = 0; i < sizeof(config_t); i += 4) {
+    if (FLASH_ErasePage(FLASH_WRITE_ADDR) == FLASH_COMPLETE)
+    {
+        for (i = 0; i < sizeof(config_t); i += 4)
+        {
             status = FLASH_ProgramWord(FLASH_WRITE_ADDR + i, *(uint32_t *) ((char *) &cfg + i));
             if (status != FLASH_COMPLETE)
                 break;          // TODO: fail
@@ -132,10 +136,10 @@ static void resetConf(void)
     cfg.mixerConfiguration = MULTITYPE_QUADX;
     featureClearAll();
 //    featureSet(FEATURE_VBAT);
-//    featureSet(FEATURE_PPM);                    // Crashpilot
+    featureSet(FEATURE_PPM);                    // Crashpilot
 //    featureSet(FEATURE_FAILSAFE);               // Crashpilot
-//    featureSet(FEATURE_LCD);                    // Crashpilot 
-//    featureSet(FEATURE_GPS);                    // Crashpilot 
+    featureSet(FEATURE_LCD);                    // Crashpilot
+    featureSet(FEATURE_GPS);                    // Crashpilot
 //    featureSet(FEATURE_PASS);                   // Just pass Throttlechannel Crashpilot
 
     cfg.P8[ROLL]                  = 40;
@@ -154,13 +158,13 @@ static void resetConf(void)
     cfg.D8[PIDALT]                = 80;
 
 
-    cfg.P8[PIDPOS]                = 0;          // FIND YOUR VALUE
+    cfg.P8[PIDPOS]                = 35;         // FIND YOUR VALUE
     cfg.I8[PIDPOS]                = 0;          // NOT USED
     cfg.D8[PIDPOS]                = 0;          // NOT USED
 
-    cfg.P8[PIDPOSR]               = 0;          // FIND YOUR VALUE                    // Controls the speed part with my PH logic
+    cfg.P8[PIDPOSR]               = 50;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
     cfg.I8[PIDPOSR]               = 0;          // DANGER "I" may lead to circeling   // Controls the speed part with my PH logic
-    cfg.D8[PIDPOSR]               = 0;          // FIND YOUR VALUE                    // Controls the speed part with my PH logic
+    cfg.D8[PIDPOSR]               = 45;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
 
     cfg.P8[PIDNAVR]               = 20;         // Crashpilot: Double the value
     cfg.I8[PIDNAVR]               = 20;         // NAV_I * 100;                       // Scaling/Purpose unchanged
@@ -178,9 +182,9 @@ static void resetConf(void)
 //    cfg.I8[PIDNAVR]               = 20;         // NAV_I * 100;
 //    cfg.D8[PIDNAVR]               = 80;         // NAV_D * 1000;
 
-    cfg.P8[PIDLEVEL]              = 55;
+    cfg.P8[PIDLEVEL]              = 70;
     cfg.I8[PIDLEVEL]              = 10;
-    cfg.D8[PIDLEVEL]              = 20;
+    cfg.D8[PIDLEVEL]              = 50;
 
     cfg.P8[PIDMAG]                = 80;         // cfg.P8[PIDVEL] = 0;// cfg.I8[PIDVEL] = 0;// cfg.D8[PIDVEL] = 0;
 
@@ -196,19 +200,19 @@ static void resetConf(void)
     cfg.mag_declination           = 107;        // Crashpilot //cfg.acc_hardware = ACC_DEFAULT;// default/autodetect
     cfg.mag_oldcalib              = 0;          // 1 = old hard iron calibration // 0 = extended calibration (better)
     cfg.acc_hardware              = 2;          // Crashpilot MPU6050
-		cfg.acc_lpf_factor            = 100;	      // changed 27.11.2012
+    cfg.acc_lpf_factor            = 100;	      // changed 27.11.2012
     cfg.acc_ins_lpf               = 10;         // General LPF for INS
 
     cfg.looptime                  = 3000;	      // changed 27.11.2012 //    cfg.acc_lpf_factor = 4;
-		cfg.oldcontroller             = 0;          // 1 selects the more or less the original BF main PID Controller
+    cfg.oldcontroller             = 0;          // 1 selects the more or less the original BF main PID Controller
     cfg.gyro_cmpf_factor          = 400;        // default MWC
     cfg.gyro_lpf                  = 42;         // Possible values 256 188 98 42 20 10 (HZ)
     cfg.accz_vel_cf               = 0.985f;     // Crashpilot: Value for complementary filter accz and barovelocity
     cfg.accz_alt_cf               = 0.940f;     // Crashpilot: Value for complementary filter accz and altitude
     cfg.baro_lag                  = 0.3f;       // Lag of Baro
-    cfg.barodownscale             = 0.8f;       // Scale downmovement down (because copter drops faster than rising)
+    cfg.barodownscale             = 0.7f;       // Scale downmovement down (because copter drops faster than rising)
     // Autoland
-		cfg.autolandrate              = 75;         // Temporary value "64" increase to increase Landingspeed
+    cfg.autolandrate              = 80;         // Temporary value "64" increase to increase Landingspeed
 
     cfg.nazedebug                 = 0;          // Crashpilot: 1 = Debug Barovalues //cfg.baro_noise_lpf = 0.6f;// Crashpilot: Not used anymore//cfg.baro_cf = 0.985f;// Crashpilot: Not used anymore
     cfg.moron_threshold           = 32;
@@ -216,29 +220,29 @@ static void resetConf(void)
     cfg.vbatscale                 = 110;
     cfg.vbatmaxcellvoltage        = 43;
     cfg.vbatmincellvoltage        = 33;
-		cfg.power_adc_channel         = 0;
+    cfg.power_adc_channel         = 0;
 
     // Radio
     parseRcChannels("AETR1234");
     cfg.deadband                  = 10;         // Crashpilot: A little deadband will not harm our crappy RC
     cfg.yawdeadband               = 15;         // Crashpilot: A little deadband will not harm our crappy RC
     cfg.alt_hold_throttle_neutral = 50;         // Crashpilot: A little deadband will not harm our crappy RC
-		cfg.phdeadband                = 15;         // This Deadband adds to cfg.deadband
-		
+    cfg.phdeadband                = 5;          // This Deadband adds to cfg.deadband
+
     // cfg.spektrum_hires = 0;
     cfg.midrc                     = 1500;
     cfg.mincheck                  = 1100;
     cfg.maxcheck                  = 1900;
     cfg.retarded_arm              = 0;          // disable arm/disarm on roll left/right
-		cfg.auxChannels               = 4;          // cGiesen: Default = 4, then like the standard!
-		cfg.killswitchtime            = 0;          // Time in ms when your arm switch becomes a Killswitch, 0 disables the Killswitch
+    cfg.auxChannels               = 4;          // cGiesen: Default = 4, then like the standard!
+    cfg.killswitchtime            = 0;          // Time in ms when your arm switch becomes a Killswitch, 0 disables the Killswitch, can not be used together with FEATURE_INFLIGHT_ACC_CAL
 
     // Motor/ESC/Servo
-    cfg.minthrottle               = 1150;       // ORIG
-//	  cfg.minthrottle               = 1220;
+//    cfg.minthrottle               = 1150;       // ORIG
+    cfg.minthrottle               = 1220;
 //	  cfg.minthrottle               = 1080;
     cfg.maxthrottle               = 1950;
-		cfg.passmotor                 = 0;          // Crashpilot: Only used with feature pass. If 0 = all Motors, otherwise specific Motor
+    cfg.passmotor                 = 0;          // Crashpilot: Only used with feature pass. If 0 = all Motors, otherwise specific Motor
     cfg.mincommand                = 1000;
     cfg.motor_pwm_rate            = 400;
     cfg.servo_pwm_rate            = 50;
@@ -276,14 +280,14 @@ static void resetConf(void)
     cfg.gps_type                  = 1;          // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3, GPS_UBLOX_DUMB = 4
     cfg.gps_baudrate              = 38400;      // Changed 5/3/13 was 115200;
     cfg.gps_ins_vel               = 0.72f;      // Crashpilot GPS INS The LOWER the value the closer to gps speed // Dont go to high here
-    cfg.gps_lag                   = 1.0f;       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind, 1.5s is better for ublox on the "bench test"
+    cfg.gps_lag                   = 1.0f;       // This is to overcome GPS LAG, it is applied only if greater than gps_ph_settlespeed
+    cfg.gps_speedfilter           = 0.80f;      // The higher the more filter
     cfg.gps_phase                 = 0;          // Make a phaseshift +-90 Deg max of GPS output
     cfg.gps_ph_minsat             = 6;          // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
-		cfg.gps_ph_apm                = 0;          // If 1 the original APM PH Controller is used and original parameter scaling
-    cfg.gps_ph_settletime         = 400;        // Time in ms before new absolute Position is taken into account after settlespeed reached
-    cfg.gps_ph_settlespeed        = 50;         // PH settlespeed in cm/s
+    cfg.gps_ph_apm                = 0;          // If 1 the original APM PH Controller is used and original parameter scaling
+    cfg.gps_ph_settlespeed        = 150;        // PH settlespeed in cm/s
     cfg.gps_ph_targetsqrt         = 2;          // This is the speed target of PH. That means if the copter moves faster than that, the maximal tiltangle reduced dramatically. Just think of the value as a working point for the sqrt brake
-		cfg.gps_minanglepercent       = 10;         // Percent 1 - 100% of gps_maxangle for minimal tilt, as lower limit for "gps_ph_targetsqrt"
+    cfg.gps_minanglepercent       = 15;         // Percent 1 - 100% of gps_maxangle for minimal tilt, as lower limit for "gps_ph_targetsqrt"
     cfg.gps_maxangle              = 25;         // maximal over all GPS bank angle
     cfg.gps_phmove_speed          = 0.0f;       // DONT USE THIS FOR FLIGHT! PH move speed // 0 disables PH move - recommended!!
     cfg.gps_wp_radius             = 200;
@@ -293,9 +297,9 @@ static void resetConf(void)
     cfg.gps_rtl_flyaway           = 0;          // 0 Disables. If during RTL the distance increases beyond this value (in meters), something is wrong, autoland
     cfg.gps_yaw                   = 30;         // Thats the MAG P during GPS functions, substitute for "cfg.P8[PIDMAG]"
     cfg.nav_rtl_lastturn          = 1;          // 1 = when copter gets to home position it rotates it's head to takeoff direction independend of nav_controls_heading
-    cfg.nav_slew_rate             = 50;         // 0 Enables Spikefilter 
-    cfg.nav_tail_first            = 0;          // 1 = Copter comes back with ass first (only works with nav_controls_heading = 1) 
-//    cfg.nav_tail_first            = 1;          // 1 = Copter comes back with ass first (only works with nav_controls_heading = 1) 
+    cfg.nav_slew_rate             = 50;         // 0 Enables Spikefilter // was 30 and 50 before
+    cfg.nav_tail_first            = 0;          // 1 = Copter comes back with ass first (only works with nav_controls_heading = 1)
+//    cfg.nav_tail_first            = 1;          // 1 = Copter comes back with ass first (only works with nav_controls_heading = 1)
     cfg.nav_controls_heading      = 1;          // 1 = Nav controls YAW during WP ONLY
     cfg.nav_speed_min             = 150;
     cfg.nav_speed_max             = 350;
@@ -310,19 +314,22 @@ static void resetConf(void)
     // serial (USART1) baudrate
     cfg.serial_baudrate           = 115200;
 
-	  // LED Stuff
-	  cfg.led_invert                = 0;          // Crashpilot: Inversion of LED 0&1 Partly implemented because Bootup is not affected
-	  cfg.LED_Type                  = 1;		      // 1=MWCRGB / 2=MONO_LED / 3=LEDRing
-	  cfg.LED_Pinout                = 1;		      // rc6
-	  cfg.LED_ControlChannel        = 8;		      // AUX4 (Channel 8)
-	  cfg.LED_Armed                 = 0;		      // 0 = Show LED only if armed, 1 = always show LED
-	  cfg.LED_Pattern1			        = 1300; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
-	  cfg.LED_Pattern2			        = 1800; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
-	  cfg.LED_Pattern3			        = 1900; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
-	  cfg.LED_Toggle_Delay          = 0x08; 	    // slow down LED_Pattern
+    // LED Stuff
+    cfg.led_invert                = 0;          // Crashpilot: Inversion of LED 0&1 Partly implemented because Bootup is not affected
+    cfg.LED_Type                  = 1;		      // 1=MWCRGB / 2=MONO_LED / 3=LEDRing
+    cfg.LED_Pinout                = 1;		      // rc6
+    cfg.LED_ControlChannel        = 8;		      // AUX4 (Channel 8)
+    cfg.LED_Armed                 = 0;		      // 0 = Show LED only if armed, 1 = always show LED
+    cfg.LED_Pattern1			        = 1300; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
+    cfg.LED_Pattern2			        = 1800; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
+    cfg.LED_Pattern3			        = 1900; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
+    cfg.LED_Toggle_Delay          = 0x08; 	    // slow down LED_Pattern
 
-	  // Sonar Stuff
-	  cfg.SONAR_Pinout              = 1;          // cGiesen: rc78
+    // Sonar Stuff
+    cfg.SONAR_Pinout              = 1;          // cGiesen: rc78// 0=PWM56  1=RC78 2=I2C (DaddyW)
+    cfg.sonar_min                 = 50;         // Valid Sonar minimal range in cm (0-200)
+    cfg.sonar_max                 = 200;        // Valid Sonar maximal range in cm (0-700)
+    cfg.sonar_debug               = 0;          // 1 Sends Sonardata within sonar_min/max in debug[0] when Baro is activated
 
     // custom mixer. clear by defaults.
     for (i = 0; i < MAX_MOTORS; i++) cfg.customMixer[i].throttle = 0.0f;

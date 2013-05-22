@@ -35,57 +35,57 @@ void hmc5883lInit(float *calibrationGain)
     float magGain[3];
     int16_t magADC[3];
     int i;
-    int32_t xyz_total[3] = { 0, 0, 0 }; // 32 bit totals so they won't overflow.
-    bool bret = true;           // Error indicator
+    int32_t xyz_total[3] = { 0, 0, 0 };             // 32 bit totals so they won't overflow.
+    bool bret = true;                               // Error indicator
 
-    // PB12 - MAG_DRDY output on rev4 hardware
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12;
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12;      // PB12 - MAG_DRDY output on rev4 hardware
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
     GPIO_Init(GPIOB, &GPIO_InitStructure);
 
     delay(50);
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFA, 0x010 + HMC_POS_BIAS);   // Reg A DOR = 0x010 + MS1, MS0 set to pos bias
-    // Note that the  very first measurement after a gain change maintains the same gain as the previous setting. 
+    // Note that the  very first measurement after a gain change maintains the same gain as the previous setting.
     // The new gain setting is effective from the second measurement and on.
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFB, 2 << 5); // Set the Gain
     delay(100);
     hmc5883lRead(magADC);
 
-    for (i = 0; i < 10; i++) {  // Collect 10 samples
+    for (i = 0; i < 10; i++)                        // Collect 10 samples
+    {
         i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE, 1);
         delay(50);
-        hmc5883lRead(magADC);       // Get the raw values in case the scales have already been changed.
+        hmc5883lRead(magADC);                       // Get the raw values in case the scales have already been changed.
 
-        // Since the measurements are noisy, they should be averaged rather than taking the max.
-        xyz_total[0] += magADC[0];
+        xyz_total[0] += magADC[0];                  // Since the measurements are noisy, they should be averaged rather than taking the max.
         xyz_total[1] += magADC[1];
         xyz_total[2] += magADC[2];
 
-        // Detect saturation.
-        if (-4096 >= min(magADC[0], min(magADC[1], magADC[2]))) {
+        if (-4096 >= min(magADC[0], min(magADC[1], magADC[2])))     // Detect saturation.
+        {
             bret = false;
-            break;              // Breaks out of the for loop.  No sense in continuing if we saturated.
+            break;                                  // Breaks out of the for loop.  No sense in continuing if we saturated.
         }
         LED1_TOGGLE;
     }
 
     // Apply the negative bias. (Same gain)
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFA, 0x010 + HMC_NEG_BIAS);   // Reg A DOR = 0x010 + MS1, MS0 set to negative bias.
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 10; i++)
+    {
         i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE, 1);
         delay(50);
-        hmc5883lRead(magADC);               // Get the raw values in case the scales have already been changed.
+        hmc5883lRead(magADC);                       // Get the raw values in case the scales have already been changed.
 
-        // Since the measurements are noisy, they should be averaged.
-        xyz_total[0] -= magADC[0];
+        xyz_total[0] -= magADC[0];                  // Since the measurements are noisy, they should be averaged.
         xyz_total[1] -= magADC[1];
         xyz_total[2] -= magADC[2];
 
         // Detect saturation.
-        if (-4096 >= min(magADC[0], min(magADC[1], magADC[2]))) {
+        if (-4096 >= min(magADC[0], min(magADC[1], magADC[2])))
+        {
             bret = false;
-            break;              // Breaks out of the for loop.  No sense in continuing if we saturated.
+            break;                                  // Breaks out of the for loop.  No sense in continuing if we saturated.
         }
         LED1_TOGGLE;
     }
@@ -100,14 +100,15 @@ void hmc5883lInit(float *calibrationGain)
     i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE, 0x00);    // Mode register             -- 000000 00    continuous Conversion Mode
     delay(100);
 
-    if (!bret) {                // Something went wrong so get a best guess
+    if (!bret)                                      // Something went wrong so get a best guess
+    {
         magGain[0] = 1.0f;
         magGain[1] = 1.0f;
         magGain[2] = 1.0f;
     }
 
-    // if parameter was passed, give calibration values back
-    if (calibrationGain) {
+    if (calibrationGain)                            // if parameter was passed, give calibration values back
+    {
         calibrationGain[0] = magGain[0];
         calibrationGain[1] = magGain[1];
         calibrationGain[2] = magGain[2];

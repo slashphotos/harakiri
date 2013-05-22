@@ -3,28 +3,28 @@
  *
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without modification, 
+ * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
  *
- * Redistributions of source code must retain the above copyright notice, this list 
+ * Redistributions of source code must retain the above copyright notice, this list
  * of conditions and the following disclaimer.
- * 
- * Redistributions in binary form must reproduce the above copyright notice, this 
+ *
+ * Redistributions in binary form must reproduce the above copyright notice, this
  * list of conditions and the following disclaimer in the documentation and/or other
  * materials provided with the distribution.
- *  
- * Neither the name of the Kustaa Nyholm or SpareTimeLabs nor the names of its 
- * contributors may be used to endorse or promote products derived from this software 
+ *
+ * Neither the name of the Kustaa Nyholm or SpareTimeLabs nor the names of its
+ * contributors may be used to endorse or promote products derived from this software
  * without specific prior written permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT 
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
- * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+ * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
  * OF SUCH DAMAGE.
  */
@@ -46,11 +46,13 @@ static void uli2a(unsigned long int num, unsigned int base, int uc, char *bf)
     unsigned int d = 1;
     while (num / d >= base)
         d *= base;
-    while (d != 0) {
+    while (d != 0)
+    {
         int dgt = num / d;
         num %= d;
         d /= base;
-        if (n || dgt > 0 || d == 0) {
+        if (n || dgt > 0 || d == 0)
+        {
             *bf++ = dgt + (dgt < 10 ? '0' : (uc ? 'A' : 'a') - 10);
             ++n;
         }
@@ -60,7 +62,8 @@ static void uli2a(unsigned long int num, unsigned int base, int uc, char *bf)
 
 static void li2a(long num, char *bf)
 {
-    if (num < 0) {
+    if (num < 0)
+    {
         num = -num;
         *bf++ = '-';
     }
@@ -75,11 +78,13 @@ static void ui2a(unsigned int num, unsigned int base, int uc, char *bf)
     unsigned int d = 1;
     while (num / d >= base)
         d *= base;
-    while (d != 0) {
+    while (d != 0)
+    {
         int dgt = num / d;
         num %= d;
         d /= base;
-        if (n || dgt > 0 || d == 0) {
+        if (n || dgt > 0 || d == 0)
+        {
             *bf++ = dgt + (dgt < 10 ? '0' : (uc ? 'A' : 'a') - 10);
             ++n;
         }
@@ -89,7 +94,8 @@ static void ui2a(unsigned int num, unsigned int base, int uc, char *bf)
 
 static void i2a(int num, char *bf)
 {
-    if (num < 0) {
+    if (num < 0)
+    {
         num = -num;
         *bf++ = '-';
     }
@@ -113,7 +119,8 @@ static char a2i(char ch, char **src, int base, int *nump)
     char *p = *src;
     int num = 0;
     int digit;
-    while ((digit = a2d(ch)) >= 0) {
+    while ((digit = a2d(ch)) >= 0)
+    {
         if (digit > base)
             break;
         num = num * base + digit;
@@ -143,52 +150,60 @@ void tfp_format(void *putp, putcf putf, char *fmt, va_list va)
 
     char ch;
 
-    while ((ch = *(fmt++))) {
+    while ((ch = *(fmt++)))
+    {
         if (ch != '%')
             putf(putp, ch);
-        else {
+        else
+        {
             char lz = 0;
 #ifdef 	PRINTF_LONG_SUPPORT
             char lng = 0;
 #endif
             int w = 0;
             ch = *(fmt++);
-            if (ch == '0') {
+            if (ch == '0')
+            {
                 ch = *(fmt++);
                 lz = 1;
             }
-            if (ch >= '0' && ch <= '9') {
+            if (ch >= '0' && ch <= '9')
+            {
                 ch = a2i(ch, &fmt, 10, &w);
             }
 #ifdef 	PRINTF_LONG_SUPPORT
-            if (ch == 'l') {
+            if (ch == 'l')
+            {
                 ch = *(fmt++);
                 lng = 1;
             }
 #endif
-            switch (ch) {
+            switch (ch)
+            {
             case 0:
                 goto abort;
-            case 'u':{
+            case 'u':
+            {
 #ifdef 	PRINTF_LONG_SUPPORT
-                    if (lng)
-                        uli2a(va_arg(va, unsigned long int), 10, 0, bf);
-                    else
+                if (lng)
+                    uli2a(va_arg(va, unsigned long int), 10, 0, bf);
+                else
 #endif
-                        ui2a(va_arg(va, unsigned int), 10, 0, bf);
-                    putchw(putp, putf, w, lz, bf);
-                    break;
-                }
-            case 'd':{
+                    ui2a(va_arg(va, unsigned int), 10, 0, bf);
+                putchw(putp, putf, w, lz, bf);
+                break;
+            }
+            case 'd':
+            {
 #ifdef 	PRINTF_LONG_SUPPORT
-                    if (lng)
-                        li2a(va_arg(va, unsigned long int), bf);
-                    else
+                if (lng)
+                    li2a(va_arg(va, unsigned long int), bf);
+                else
 #endif
-                        i2a(va_arg(va, int), bf);
-                    putchw(putp, putf, w, lz, bf);
-                    break;
-                }
+                    i2a(va_arg(va, int), bf);
+                putchw(putp, putf, w, lz, bf);
+                break;
+            }
             case 'x':
             case 'X':
 #ifdef 	PRINTF_LONG_SUPPORT
@@ -212,7 +227,8 @@ void tfp_format(void *putp, putcf putf, char *fmt, va_list va)
             }
         }
     }
-  abort:;
+abort:
+    ;
 }
 
 

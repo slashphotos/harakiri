@@ -51,25 +51,26 @@ bool mpu3050Detect(sensor_t *gyro)
 
 void mpu3050Config(uint16_t lpf)
 {
-    switch (lpf) {
-        case 256:
-            mpuLowPassFilter = MPU3050_DLPF_256HZ;
-            break;
-        case 188:
-            mpuLowPassFilter = MPU3050_DLPF_188HZ;
-            break;
-        case 98:
-            mpuLowPassFilter = MPU3050_DLPF_98HZ;
-            break;
-        case 42:
-            mpuLowPassFilter = MPU3050_DLPF_42HZ;
-            break;
-        case 20:
-            mpuLowPassFilter = MPU3050_DLPF_20HZ;
-            break;
-        case 10:
-            mpuLowPassFilter = MPU3050_DLPF_10HZ;
-            break;
+    switch (lpf)
+    {
+    case 256:
+        mpuLowPassFilter = MPU3050_DLPF_256HZ;
+        break;
+    case 188:
+        mpuLowPassFilter = MPU3050_DLPF_188HZ;
+        break;
+    case 98:
+        mpuLowPassFilter = MPU3050_DLPF_98HZ;
+        break;
+    case 42:
+        mpuLowPassFilter = MPU3050_DLPF_42HZ;
+        break;
+    case 20:
+        mpuLowPassFilter = MPU3050_DLPF_20HZ;
+        break;
+    case 10:
+        mpuLowPassFilter = MPU3050_DLPF_10HZ;
+        break;
     }
 
     i2cWrite(MPU3050_ADDRESS, MPU3050_DLPF_FS_SYNC, MPU3050_FS_SEL_2000DPS | mpuLowPassFilter);

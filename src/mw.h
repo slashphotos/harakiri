@@ -1,10 +1,10 @@
 #pragma once
 
 /* for VBAT monitoring frequency */
-#define VBATFREQ 6        // to read battery voltage - nth number of loop iterations
+#define VBATFREQ 6                          // to read battery voltage - nth number of loop iterations
 
 #define  VERSION  211
-#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10Beta E " __DATE__ " / " __TIME__
+#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10Beta G Godzilla " __DATE__ " / " __TIME__
 
 #define LAT  0
 #define LON  1
@@ -17,15 +17,15 @@ typedef enum NavigationMode
 {
     NAV_MODE_NONE = 0,
     NAV_MODE_POSHOLD,
-	  NAV_MODE_RTL,
+    NAV_MODE_RTL,
     NAV_MODE_WP,
-	  NAV_MODE_CIRCLE
+    NAV_MODE_CIRCLE
 } NavigationMode;
 
 typedef enum WPstatus
 {
     WP_STATUS_NONE = 0,
-	  WP_STATUS_NAVIGATING,
+    WP_STATUS_NAVIGATING,
     WP_STATUS_DONE
 } WPstatus;
 
@@ -43,18 +43,19 @@ typedef enum MultiType
     MULTITYPE_FLYING_WING = 8,
     MULTITYPE_Y4 = 9,
     MULTITYPE_HEX6X = 10,
-    MULTITYPE_OCTOX8 = 11,          // Java GUI is same for the next 3 configs
-    MULTITYPE_OCTOFLATP = 12,       // MultiWinGui shows this differently
-    MULTITYPE_OCTOFLATX = 13,       // MultiWinGui shows this differently
-    MULTITYPE_AIRPLANE = 14,        // airplane / singlecopter / dualcopter (not yet properly supported)
+    MULTITYPE_OCTOX8 = 11,                  // Java GUI is same for the next 3 configs
+    MULTITYPE_OCTOFLATP = 12,               // MultiWinGui shows this differently
+    MULTITYPE_OCTOFLATX = 13,               // MultiWinGui shows this differently
+    MULTITYPE_AIRPLANE = 14,                // airplane / singlecopter / dualcopter (not yet properly supported)
     MULTITYPE_HELI_120_CCPM = 15,
     MULTITYPE_HELI_90_DEG = 16,
     MULTITYPE_VTAIL4 = 17,
-    MULTITYPE_CUSTOM = 18,          // no current GUI displays this
+    MULTITYPE_CUSTOM = 18,                  // no current GUI displays this
     MULTITYPE_LAST = 19
 } MultiType;
 
-typedef enum GimbalFlags {
+typedef enum GimbalFlags
+{
     GIMBAL_NORMAL = 1 << 0,
     GIMBAL_TILTONLY = 1 << 1,
     GIMBAL_DISABLEAUX34 = 1 << 2,
@@ -63,7 +64,8 @@ typedef enum GimbalFlags {
 } GimbalFlags;
 
 /*********** RC alias *****************/
-enum {
+enum
+{
     ROLL = 0,
     PITCH,
     YAW,
@@ -74,7 +76,8 @@ enum {
     AUX4
 };
 
-enum {
+enum
+{
     PIDROLL,
     PIDPITCH,
     PIDYAW,
@@ -88,7 +91,8 @@ enum {
     PIDITEMS
 };
 
-enum {
+enum
+{
     BOXANGLE = 0,
     BOXHORIZON,
     BOXBARO,
@@ -112,33 +116,37 @@ enum {
 #define abs(x) ((x) > 0 ? (x) : -(x))
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
-typedef struct motorMixer_t {
+typedef struct motorMixer_t
+{
     float throttle;
     float roll;
     float pitch;
     float yaw;
 } motorMixer_t;
 
-typedef struct mixer_t {
+typedef struct mixer_t
+{
     uint8_t numberMotor;
     uint8_t useServo;
     const motorMixer_t *motor;
 } mixer_t;
 
-enum {
+enum
+{
     ALIGN_GYRO = 0,
     ALIGN_ACCEL = 1,
     ALIGN_MAG = 2
 };
 
-typedef struct config_t {
+typedef struct config_t
+{
     uint8_t  version;
     uint16_t size;
     uint8_t  magic_be;                      // magic number, should be 0xBE
     uint8_t  mixerConfiguration;
     uint32_t enabledFeatures;
     uint16_t looptime;                      // imu loop time in us
-		uint8_t  oldcontroller;                 // This selects the original BF main PID Controller, but done with floatpoints but without DT
+    uint8_t  oldcontroller;                 // This selects the original BF main PID Controller, but done with floatpoints but without DT
     uint8_t  P8[PIDITEMS];
     uint8_t  I8[PIDITEMS];
     uint8_t  D8[PIDITEMS];
@@ -151,10 +159,10 @@ typedef struct config_t {
     uint8_t  dynThrPID;
     int16_t  accZero[3];
     float    magZero[3];
-	  float    sphere_radius;
-	  uint8_t  mag_calibrated;                // Just to supress crazymag in gui display
+    float    sphere_radius;
+    uint8_t  mag_calibrated;                // Just to supress crazymag in gui display
     int16_t  mag_declination;               // Get your magnetic decliniation from here : http://magnetic-declination.com/
-    uint8_t  mag_oldcalib;                  // 1 = old hard iron calibration // 0 = extended calibration (better)		
+    uint8_t  mag_oldcalib;                  // 1 = old hard iron calibration // 0 = extended calibration (better)
     int16_t  angleTrim[2];                  // accelerometer trim
     // sensor-related stuff
     int8_t   align[3][3];                   // acc, gyro, mag alignment (ex: with sensor output of X, Y, Z, align of 1 -3 2 would return X, -Z, Y)
@@ -163,10 +171,10 @@ typedef struct config_t {
     uint16_t gyro_lpf;                      // mpuX050 LPF setting (TODO make it work on L3GD as well)
     uint16_t gyro_cmpf_factor;              // Set the Gyro Weight for Gyro/Acc complementary filter. Increasing this value would reduce and delay Acc influence on the output of the filter.
     uint32_t gyro_smoothing_factor;         // How much to smoothen with per axis (32bit value with Roll, Pitch, Yaw in bits 24, 16, 8 respectively
-		float    accz_vel_cf;                   // Crashpilot: Value for complementary filter accz and barovelocity
-		float    accz_alt_cf;                   // Crashpilot: Value for complementary filter accz and altitude
+    float    accz_vel_cf;                   // Crashpilot: Value for complementary filter accz and barovelocity
+    float    accz_alt_cf;                   // Crashpilot: Value for complementary filter accz and altitude
     float    baro_lag;                      // Lag of Baro
-    float    barodownscale;                 // Scale downmovement down		
+    float    barodownscale;                 // Scale downmovement down
     uint8_t  nazedebug;                     // Crashpilot: 1 = Debug Barovalues
     uint8_t  moron_threshold;               // people keep forgetting that moving model while init results in wrong gyro offsets. and then they never reset gyro. so this is now on by default.
 
@@ -188,7 +196,7 @@ typedef struct config_t {
     uint16_t mincheck;                      // minimum rc end
     uint16_t maxcheck;                      // maximum rc end
     uint8_t  retarded_arm;                  // allow disarsm/arm on throttle down + roll left/right
-		uint16_t killswitchtime;                // Time in ms when your arm switch becomes a Killswitch, 0 disables
+    uint16_t killswitchtime;                // Time in ms when your arm switch becomes a Killswitch, 0 disables
 
     // Failsafe related configuration
     uint8_t  failsafe_delay;                // Guard time for failsafe activation after signal lost. 1 step = 0.1sec - 1sec in example (10)
@@ -237,18 +245,18 @@ typedef struct config_t {
     uint16_t gimbal_roll_mid;               // gimbal roll servo neutral value
 
     // Autoland
-		uint8_t  autolandrate;                  // Temporary value "64" increase to increase Landingspeed
+    uint8_t  autolandrate;                  // Temporary value "64" increase to increase Landingspeed
 
     // gps-related stuff
     uint8_t  gps_type;                      // Type of GPS hardware. 0: NMEA 1: UBX 2+ ??
-		float    gps_ins_vel;                   // Crashpilot: Value for complementary filter INS and GPS Velocity
+    float    gps_ins_vel;                   // Crashpilot: Value for complementary filter INS and GPS Velocity
     float    gps_lag;                       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind
+    float    gps_speedfilter;               // The higher the more filter
     float    gps_phase;                     // Make a phaseshift +-90 Deg max of GPS output
     uint8_t  acc_ins_lpf;                   // ACC lowpass for Acc GPS INS
-		uint8_t  gps_ph_minsat;                 // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
-		uint8_t  gps_ph_apm;                    // If 1 the original APM PH Controller is used
-    uint16_t gps_ph_settletime;             // Time in ms before new absolute Position is taken into account after settlespeed reached
-    uint8_t  gps_ph_settlespeed;            // PH settlespeed in cm/s
+    uint8_t  gps_ph_minsat;                 // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
+    uint8_t  gps_ph_apm;                    // If 1 the original APM PH Controller is used
+    uint16_t  gps_ph_settlespeed;           // PH settlespeed in cm/s
     uint16_t gps_ph_targetsqrt;             // This is the speed target of PH. That means if the copter moves faster than that, the maximal tiltangle reduced dramatically
     float    gps_phmove_speed;              // DONT USE THIS FOR FLIGHT! PH move speed // 0 disables PH move - recommended!!
     uint8_t  gps_maxangle;                  // maximal over all GPS bank angle
@@ -259,38 +267,40 @@ typedef struct config_t {
     uint8_t  gps_rtl_flyaway;               // If during RTL the distance increases beyond this valus in meters, something is wrong, autoland
     uint8_t  gps_yaw;                       // Thats the MAG P during GPS functions, substitute for "cfg.P8[PIDMAG]"
     uint8_t  nav_slew_rate;                 // Adds a rate control to nav output, will smoothen out nav angle spikes
-    uint8_t  nav_tail_first;                // 1 = Copter comes back with ass first (only works with nav_controls_heading = 1) 
+    uint8_t  nav_tail_first;                // 1 = Copter comes back with ass first (only works with nav_controls_heading = 1)
     uint8_t  nav_controls_heading;          // copter faces toward the navigation point, maghold must be enabled for it
-		uint8_t  nav_rtl_lastturn;              // Something like NAV_SET_TAKEOFF_HEADING on mwii
+    uint8_t  nav_rtl_lastturn;              // Something like NAV_SET_TAKEOFF_HEADING on mwii
     int16_t  nav_speed_min;                 // cm/sec
     int16_t  nav_speed_max;                 // cm/sec
     uint16_t gps_rtl_minhight;              // Minimal RTL hight in m, 0 disable  // Crashpilot
 
     uint32_t serial_baudrate;               // serial(uart1) baudrate
 
-	  // LED Stuff
-	  uint8_t  led_invert;                    // Crashpilot invert LED 0&1
+    // LED Stuff
+    uint8_t  led_invert;                    // Crashpilot invert LED 0&1
 
-	  //cGiesen start
-	  uint8_t  LED_Type;                      // 1=MWCRGB / 2=MONO_LED / 3=LEDRing
-	  uint8_t  LED_Pinout;                    // choose LED pinout (MONO_LED: 0=LED rc5, 1=LED rc6 / MWCRGB: coming soon)
-	  uint8_t  LED_ControlChannel;            // RC Channel to control the LED Pattern
-	  uint8_t  LED_Armed;          		        // 0 = Show LED only if armed, 1 = always show LED
-	  uint16_t LED_Toggle_Delay;              //16bit bit pattern to slow down led patterns
+    uint8_t  LED_Type;                      // 1=MWCRGB / 2=MONO_LED / 3=LEDRing
+    uint8_t  LED_Pinout;                    // choose LED pinout (MONO_LED: 0=LED rc5, 1=LED rc6 / MWCRGB: coming soon)
+    uint8_t  LED_ControlChannel;            // RC Channel to control the LED Pattern
+    uint8_t  LED_Armed;          		        // 0 = Show LED only if armed, 1 = always show LED
+    uint16_t LED_Toggle_Delay;              // 16bit bit pattern to slow down led patterns
     uint32_t LED_Pattern1;            	  	// 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
     uint32_t LED_Pattern2;            		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
     uint32_t LED_Pattern3;            		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
 
     // Sonar Stuff
     uint8_t  SONAR_Pinout;                  // choose sonar pinout 0=sonar_pwm56,1=sonar_rc78
-    //cGiesen end
+    uint8_t  sonar_min;                     // Valid Sonar minimal range in cm (0-200)
+    uint16_t sonar_max;                     // Valid Sonar maximal range in cm (0-700)
+    uint8_t  sonar_debug;                   // 1 Sets Sonardata within sonar_min/max in debug[0]
 
     motorMixer_t customMixer[MAX_MOTORS];   // custom mixtable
     uint8_t  magic_ef;                      // magic number, should be 0xEF
     uint8_t  chk;                           // XOR checksum
 } config_t;
 
-typedef struct flags_t {
+typedef struct flags_t
+{
     uint8_t OK_TO_ARM;
     uint8_t ARMED;
     uint8_t ACC_CALIBRATED;
@@ -334,14 +344,13 @@ extern int32_t  EstAlt;
 extern int32_t  AltHold;
 extern int16_t  vario;
 
-extern uint16_t BaroDeltaTime;             //Crashpilot
-extern int16_t  BaroP;                     //Crashpilot
-extern int16_t  BaroI;                     //Crashpilot
-extern int16_t  BaroD;                     //Crashpilot
-extern uint8_t  newbaroalt;                //Crashpilot
-extern uint32_t BaroFstTime;               //Crashpilot
+extern uint16_t BaroDeltaTime;
+extern int16_t  BaroP;
+extern int16_t  BaroI;
+extern int16_t  BaroD;
+extern uint8_t  newbaroalt;
+extern bool     GroundAltInitialized;
 
-extern int16_t  zVelocity;
 extern int16_t  motor[MAX_MOTORS];
 extern int16_t  servo[8];
 extern int16_t  rcData[MAX_RC_CHANNELS];    // extern int16_t rcData[8];
@@ -359,26 +368,29 @@ extern float    heading;
 extern float    magHold;
 extern float    magneticDeclination;
 
+// Sonar
+extern uint8_t  SonarStatus;                // 0 = no contact, 1 = made contact, 2 = had contact but lost it, 3 = steady contact
+
 // GPS stuff
 extern int32_t  GPS_coord[2];
 extern int32_t  GPS_home[2];
-extern int32_t  GPS_WP[2];                                   // Currently used WP
+extern int32_t  GPS_WP[2];                  // Currently used WP
 extern uint8_t  GPS_numSat;
-extern uint16_t GPS_distanceToHome;                          // distance to home
-extern int16_t  GPS_directionToHome;                         // direction to home
-extern uint16_t GPS_altitude,GPS_speed;                      // altitude in 0.1m and speed in 0.1m/s
-extern uint8_t  GPS_update;                                  // it's a binary toogle to distinct a GPS position update
-extern float    GPS_angle[2];                                // it's the angles that must be applied for GPS correction
-extern uint16_t GPS_ground_course;                           // degrees*10
-extern uint8_t  GPS_Present;                                 // Checksum from Gps serial
+extern uint16_t GPS_distanceToHome;         // distance to home
+extern int16_t  GPS_directionToHome;        // direction to home
+extern uint16_t GPS_altitude,GPS_speed;     // altitude in 0.1m and speed in 0.1m/s
+extern uint8_t  GPS_update;                 // it's a binary toogle to distinct a GPS position update
+extern float    GPS_angle[2];               // it's the angles that must be applied for GPS correction
+extern uint16_t GPS_ground_course;          // degrees*10
+extern uint8_t  GPS_Present;                // Checksum from Gps serial
 extern uint8_t  GPS_Enable;
 extern float    nav[2];
-extern int8_t   nav_mode;                                    // Navigation mode
+extern int8_t   nav_mode;                   // Navigation mode
 extern int8_t   wp_mode;
-extern float    nav_rated[2];                                // Adding a rate controller to the navigation to make it smoother
+extern float    nav_rated[2];               // Adding a rate controller to the navigation to make it smoother
 extern int32_t  WP_Target_Alt;
 extern int16_t  WP_Desired_Climbrate;
-extern bool     WP_Fastcorner;                               // Dont decrease Speed at Target
+extern bool     WP_Fastcorner;              // Dont decrease Speed at Target
 extern float    sin_yaw_y;
 extern float    cos_yaw_x;
 
@@ -395,7 +407,7 @@ extern uint32_t LED_Value;
 // main
 void loop(void);
 void pass(void);
-void LD0_OFF(void);                 // Crashpilot LED Inverter stuff
+void LD0_OFF(void);                         // Crashpilot LED Inverter stuff
 void LD1_OFF(void);
 void LD0_ON(void);
 void LD1_ON(void);
@@ -405,7 +417,7 @@ void imuInit(void);
 void annexCode(void);
 void computeIMU(void);
 void blinkLED(uint8_t num, uint8_t wait, uint8_t repeat);
-void getEstimatedAltitude(void);
+void getEstimatedAltitude(bool purge);
 
 // Sensors
 void sensorsAutodetect(void);

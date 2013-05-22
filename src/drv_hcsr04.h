@@ -1,9 +1,12 @@
 #pragma once
 
-typedef enum {
+typedef enum
+{
     sonar_pwm56,
     sonar_rc78,
+    sonar_i2c,
 } sonar_config_t;
 
-void hcsr04_init(sonar_config_t config);
+bool hcsr04_init(sonar_config_t config);
 void hcsr04_get_distance(volatile int16_t* distance);
+void hcsr04_get_i2c_distance(volatile int16_t* distance);

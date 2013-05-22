@@ -14,11 +14,13 @@ static void ppmIRQHandler(TIM_TypeDef *tim);
 extern uint16_t failsafeCnt;
 
 // local vars
-static struct TIM_Channel {
+static struct TIM_Channel
+{
     TIM_TypeDef *tim;
     uint16_t channel;
     uint16_t cc;
-} Channels[] = {
+} Channels[] =
+{
     { TIM2, TIM_Channel_1, TIM_IT_CC1 },
     { TIM2, TIM_Channel_2, TIM_IT_CC2 },
     { TIM2, TIM_Channel_3, TIM_IT_CC3 },
@@ -29,7 +31,8 @@ static struct TIM_Channel {
     { TIM3, TIM_Channel_4, TIM_IT_CC4 },
 };
 
-static volatile uint16_t *OutputChannels[] = {
+static volatile uint16_t *OutputChannels[] =
+{
     &(TIM4->CCR1),
     &(TIM4->CCR2),
     &(TIM4->CCR3),
@@ -41,7 +44,8 @@ static volatile uint16_t *OutputChannels[] = {
     &(TIM3->CCR4),
 };
 
-static struct PWM_State {
+static struct PWM_State
+{
     uint8_t state;
     uint16_t rise;
     uint16_t fall;
@@ -67,7 +71,8 @@ static void ppmIRQHandler(TIM_TypeDef *tim)
     static uint16_t last = 0;
     static uint8_t chan = 0;
 
-    if (TIM_GetITStatus(tim, TIM_IT_CC1) == SET) {
+    if (TIM_GetITStatus(tim, TIM_IT_CC1) == SET)
+    {
         last = now;
         now = TIM_GetCapture1(tim);
         rcActive = true;
@@ -75,16 +80,23 @@ static void ppmIRQHandler(TIM_TypeDef *tim)
 
     TIM_ClearITPendingBit(tim, TIM_IT_CC1);
 
-    if (now > last) {
+    if (now > last)
+    {
         diff = (now - last);
-    } else {
+    }
+    else
+    {
         diff = ((0xFFFF - last) + now);
     }
 
-    if (diff > 4000) {
+    if (diff > 4000)
+    {
         chan = 0;
-    } else {
-        if (diff > 750 && diff < 2250 && chan < 8) {   // 750 to 2250 ms is our 'valid' channel range
+    }
+    else
+    {
+        if (diff > 750 && diff < 2250 && chan < 8)     // 750 to 2250 ms is our 'valid' channel range
+        {
             Inputs[chan].capture = diff;
         }
         chan++;
@@ -97,26 +109,29 @@ static void pwmIRQHandler(TIM_TypeDef *tim)
     uint8_t i;
     uint16_t val = 0;
 
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < 8; i++)
+    {
         struct TIM_Channel channel = Channels[i];
         struct PWM_State *state = &Inputs[i];
 
-        if (channel.tim == tim && (TIM_GetITStatus(tim, channel.cc) == SET)) {
+        if (channel.tim == tim && (TIM_GetITStatus(tim, channel.cc) == SET))
+        {
             TIM_ClearITPendingBit(channel.tim, channel.cc);
 
-            switch (channel.channel) {
-                case TIM_Channel_1:
-                    val = TIM_GetCapture1(channel.tim);
-                    break;
-                case TIM_Channel_2:
-                    val = TIM_GetCapture2(channel.tim);
-                    break;
-                case TIM_Channel_3:
-                    val = TIM_GetCapture3(channel.tim);
-                    break;
-                case TIM_Channel_4:
-                    val = TIM_GetCapture4(channel.tim);
-                    break;
+            switch (channel.channel)
+            {
+            case TIM_Channel_1:
+                val = TIM_GetCapture1(channel.tim);
+                break;
+            case TIM_Channel_2:
+                val = TIM_GetCapture2(channel.tim);
+                break;
+            case TIM_Channel_3:
+                val = TIM_GetCapture3(channel.tim);
+                break;
+            case TIM_Channel_4:
+                val = TIM_GetCapture4(channel.tim);
+                break;
             }
 
             if (state->state == 0)
@@ -124,14 +139,17 @@ static void pwmIRQHandler(TIM_TypeDef *tim)
             else
                 state->fall = val;
 
-            if (state->state == 0) {
+            if (state->state == 0)
+            {
                 // switch states
                 state->state = 1;
 
                 TIM_ICInitStructure.TIM_ICPolarity = TIM_ICPolarity_Falling;
                 TIM_ICInitStructure.TIM_Channel = channel.channel;
                 TIM_ICInit(channel.tim, &TIM_ICInitStructure);
-            } else {
+            }
+            else
+            {
                 // compute capture
                 if (state->fall > state->rise)
                     state->capture = (state->fall - state->rise);
@@ -159,8 +177,9 @@ static void pwmInitializeInput(bool usePPM)
     NVIC_InitTypeDef NVIC_InitStructure = { 0, };
     uint8_t i;
 
-   // Input pins
-    if (usePPM) {
+    // Input pins
+    if (usePPM)
+    {
         // Configure TIM2_CH1 for PPM input
         GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;
         GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD;
@@ -195,13 +214,15 @@ static void pwmInitializeInput(bool usePPM)
 
         // configure number of PWM outputs, in PPM mode, we use bottom 4 channels more more motors
         numOutputChannels = 10;
-    } else {
+    }
+    else
+    {
         // Configure TIM2 all 4 channels
         GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_4;
         GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD;
         GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
         GPIO_Init(GPIOA, &GPIO_InitStructure);
-        
+
         // TODO Configure EXTI4 1 channel
 
         // Input timers on TIM2 for PWM
@@ -223,12 +244,13 @@ static void pwmInitializeInput(bool usePPM)
         TIM_ICInitStructure.TIM_ICSelection = TIM_ICSelection_DirectTI;
         TIM_ICInitStructure.TIM_ICPrescaler = TIM_ICPSC_DIV1;
         TIM_ICInitStructure.TIM_ICFilter = 0x0;
-        
-        for (i = 0; i < 4; i++) {
+
+        for (i = 0; i < 4; i++)
+        {
             TIM_ICInitStructure.TIM_Channel = Channels[i].channel;
             TIM_ICInit(Channels[i].tim, &TIM_ICInitStructure);
         }
-        
+
         // TODO EXTI4
 
         TIM_ITConfig(TIM2, TIM_IT_CC1 | TIM_IT_CC2 | TIM_IT_CC3 | TIM_IT_CC4, ENABLE);
@@ -270,7 +292,7 @@ bool pwmInit(drv_pwm_config_t *init)
     // use PPM or PWM input
     usePPMFlag = init->usePPM;
 
-    // preset channels to center    
+    // preset channels to center
     for (i = 0; i < 8; i++)
         Inputs[i].capture = 1500;
 
@@ -314,7 +336,8 @@ bool pwmInit(drv_pwm_config_t *init)
     TIM_OC1PreloadConfig (TIM4, TIM_OCPreload_Enable);
 
     // turn on more motor outputs if we're using ppm / not using pwm input
-    if (!init->enableInput || init->usePPM) {
+    if (!init->enableInput || init->usePPM)
+    {
         // TODO
     }
 

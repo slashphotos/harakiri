@@ -16,10 +16,13 @@ uint32_t txBufferHead = 0;
 static void uartTxDMA(void)
 {
     DMA1_Channel4->CMAR = (uint32_t)&txBuffer[txBufferTail];
-    if (txBufferHead > txBufferTail) {
+    if (txBufferHead > txBufferTail)
+    {
         DMA1_Channel4->CNDTR = txBufferHead - txBufferTail;
         txBufferTail = txBufferHead;
-    } else {
+    }
+    else
+    {
         DMA1_Channel4->CNDTR = UART_BUFFER_SIZE - txBufferTail;
         txBufferTail = 0;
     }
@@ -230,15 +233,20 @@ void USART2_IRQHandler(void)
 {
     uint16_t SR = USART2->SR;
 
-    if (SR & USART_IT_RXNE) {
+    if (SR & USART_IT_RXNE)
+    {
         if (uart2Callback)
             uart2Callback(USART_ReceiveData(USART2));
     }
-    if (SR & USART_FLAG_TXE) {
-        if (tx2BufferTail != tx2BufferHead) {
+    if (SR & USART_FLAG_TXE)
+    {
+        if (tx2BufferTail != tx2BufferHead)
+        {
             USART2->DR = tx2Buffer[tx2BufferTail];
             tx2BufferTail = (tx2BufferTail + 1) % UART2_BUFFER_SIZE;
-        } else {
+        }
+        else
+        {
             USART_ITConfig(USART2, USART_IT_TXE, DISABLE);
         }
     }

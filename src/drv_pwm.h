@@ -4,7 +4,8 @@
 #define MAX_SERVOS  8
 #define MAX_INPUTS  MAX_RC_CHANNELS
 
-typedef struct drv_pwm_config_t {
+typedef struct drv_pwm_config_t
+{
     bool enableInput;
     bool usePPM;
     bool useUART;
@@ -21,7 +22,8 @@ typedef struct drv_pwm_config_t {
 } drv_pwm_config_t;
 
 // This indexes into the read-only hardware definition structure in drv_pwm.c, as well as into pwmPorts[] structure with dynamic data.
-enum {
+enum
+{
     PWM1 = 0,
     PWM2,
     PWM3,
@@ -39,7 +41,8 @@ enum {
     MAX_PORTS
 };
 
-typedef struct {
+typedef struct
+{
     TIM_TypeDef *tim;
     GPIO_TypeDef *gpio;
     uint32_t pin;
