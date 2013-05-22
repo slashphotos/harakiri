@@ -184,6 +184,7 @@ const clivalue_t valueTable[] = {
     { "nazedebug",                 VAR_UINT8,  &cfg.nazedebug,                   0,          5, 0 },
     { "moron_threshold",           VAR_UINT8,  &cfg.moron_threshold,             0,        128, 0 },
     { "mag_declination",           VAR_INT16,  &cfg.mag_declination,        -18000,      18000, 1 },
+    { "mag_oldcalib",              VAR_UINT8,  &cfg.mag_oldcalib,                0,          1, 0 },		
     { "gps_baudrate",              VAR_UINT32, &cfg.gps_baudrate,             1200,     115200, 0 },
     { "gps_type",                  VAR_UINT8,  &cfg.gps_type,                    0,          9, 0 },
 		{ "gps_ins_vel",               VAR_FLOAT,  &cfg.gps_ins_vel,                 0,          1, 1 },

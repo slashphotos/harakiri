@@ -152,6 +152,7 @@ typedef struct config_t {
     int16_t  accZero[3];
     int16_t  magZero[3];
     int16_t  mag_declination;               // Get your magnetic decliniation from here : http://magnetic-declination.com/
+    uint8_t  mag_oldcalib;                  // use the old hard iron calibration?
     int16_t  angleTrim[2];                  // accelerometer trim
     // sensor-related stuff
     int8_t   align[3][3];                   // acc, gyro, mag alignment (ex: with sensor output of X, Y, Z, align of 1 -3 2 would return X, -Z, Y)
@@ -412,7 +413,7 @@ void ACC_getADC(void);
 void Baro_update(void);
 void Gyro_getADC(void);
 void Mag_init(void);
-int  Mag_getADC(void); //void Mag_getADC(void);
+int  Mag_getADC(void);
 void Sonar_init(void);
 void Sonar_update(void);
 
