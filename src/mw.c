@@ -35,7 +35,7 @@ float    magneticDeclination;
 // **********************
 // SONAR
 // **********************
-uint8_t  SonarStatus;                                                // 0 = no contact, 1 = made contact, 2 = had contact but lost it, 3 = steady contact
+uint8_t  SonarStatus = 0;                                            // 0 = no contact, 1 = made contact, 2 = had contact but lost it, 3 = steady contact
 
 // **********************
 // GPS
@@ -974,30 +974,30 @@ void loop(void)
 #endif
 
     computeIMU();
-
+    
 #ifdef BARO
-    if (sensors(SENSOR_BARO) && sensors(SENSOR_SONAR))               // OMG the ugly stuff
+    if (sensors(SENSOR_BARO) && sensors(SENSOR_SONAR))               // The ugly stuff
     {
-        Baro_update();                                               // Keep running and buffer filled, if suddenly needed
+        Baro_update();                                               // Keep running and buffer filled, produce BaroAlt
         if (f.BARO_MODE == 1)                                        // Only do this, if we are actually in althold
         {
             switch (SonarStatus)
             {
             case 0:                                                  // 0 = no contact
-                getEstimatedAltitude(false);                         // Do the normal stuff
+                getEstimatedAltitude(false);                         // Keep doing the normal stuff
                 break;
             case 1:                                                  // 1 = Made first contact
                 BaroAlt  = sonarAlt;                                 // Reset the Altholdstuff to the Sonarinput
-                AltHold8 = sonarAlt * 8;
-                AltHold  = sonarAlt;
+                getEstimatedAltitude(true);                          // Purge Buffer with "Baroalt" get some weird EstAlt users can bitch about in GUI
+                AltHold8 = EstAlt * 8;
+                AltHold  = EstAlt;
                 initialThrottleHold = LastAltThrottle;               // Freeze throttle
-                getEstimatedAltitude(true);                          // Purge Buffer with "Baroalt"
                 break;
             case 2:                                                  // 2 = Had contact but lost it
-                AltHold8 = BaroAlt * 8;                              // Reset the Altholdstuff to Baro
-                AltHold  = BaroAlt;
-                initialThrottleHold = LastAltThrottle;               // Freeze throttle
                 getEstimatedAltitude(true);                          // Purge Buffer with true Baroalt
+                AltHold8 = EstAlt * 8;                               // Reset the Altholdstuff to Baro
+                AltHold  = EstAlt;
+                initialThrottleHold = LastAltThrottle;               // Freeze throttle
                 break;
             case 3:                                                  // 3 = Somehow steady contact
                 BaroAlt  = sonarAlt;                                 // Keep on using Sonarinput instead of Baro
@@ -1013,30 +1013,11 @@ void loop(void)
         Baro_update();
         getEstimatedAltitude(false);
     }
-#endif
-
-#ifdef MAG
-    if (sensors(SENSOR_MAG))
-    {
-        float magP;
-        if (abs(rcCommand[YAW]) < 70 && f.MAG_MODE)
-        {
-            float dif = heading - magHold;
-            if (dif <= -180.0f) dif += 360.0f;
-            if (dif >= +180.0f) dif -= 360.0f;
-            if (DoingGPS()) magP = (float)cfg.gps_yaw;               // Do slower mag P in gps mode
-            else magP = (float)cfg.P8[PIDMAG];
-            if (f.SMALL_ANGLES_25) rcCommand[YAW] -= dif * magP / 30;// 18 deg
-        }
-        else magHold = heading;
-    }
-#endif
-
-#ifdef BARO
+    
+    
 //#define AutolandRate 64                                            // 40cm/sec (64/8*5)
 #define HoverTimeBeforeLand 2000000                                  // Wait 2 sec in the air for VirtualThrottle to catch up
 #define HasLandedTimeCheck 2000000                                   // Timeperiod for idlethrottle before shut off
-
     if (sensors(SENSOR_BARO) && f.BARO_MODE && f.ARMED)
     {
         switch (AutolandState)
@@ -1101,6 +1082,23 @@ void loop(void)
         AltHold = AltHold8 >> 3;                                                                                              // Althold8 is remanent from my mwii project, will be replaced
         rcCommand[THROTTLE] = constrain(initialThrottleHold + BaroP + BaroD - BaroI,cfg.minthrottle,cfg.maxthrottle);
         LastAltThrottle = rcCommand[THROTTLE];
+    }
+#endif
+
+#ifdef MAG
+    if (sensors(SENSOR_MAG))
+    {
+        float magP;
+        if (abs(rcCommand[YAW]) < 70 && f.MAG_MODE)
+        {
+            float dif = heading - magHold;
+            if (dif <= -180.0f) dif += 360.0f;
+            if (dif >= +180.0f) dif -= 360.0f;
+            if (DoingGPS()) magP = (float)cfg.gps_yaw;               // Do slower mag P in gps mode
+            else magP = (float)cfg.P8[PIDMAG];
+            if (f.SMALL_ANGLES_25) rcCommand[YAW] -= dif * magP / 30;// 18 deg
+        }
+        else magHold = heading;
     }
 #endif
 

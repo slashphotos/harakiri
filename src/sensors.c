@@ -489,32 +489,44 @@ void Sonar_init(void)                    // cfg.SONAR_Pinout  0=PWM56  1=RC78 2=
     }
     if (Inisuccess) sensorsSet(SENSOR_SONAR);
     sonarAlt = -1;
-    SonarStatus = 0;
 }
 
 void Sonar_update(void)
 {
-    uint8_t LastStatus = SonarStatus;
+    static int16_t lastsonaralt;
+    uint8_t LastStatus = SonarStatus;                                                 // Save Last Status here for comparison
+    int16_t absdiff;
   
     if (cfg.SONAR_Pinout != 2) hcsr04_get_distance(&sonarAlt);
     else hcsr04_get_i2c_distance(&sonarAlt);
 
     if (sonarAlt > cfg.sonar_min && sonarAlt < cfg.sonar_max && GroundAltInitialized) // Let Baro do it's Groundaltstuff first
     {
-        // ToDo: Maybe some Tiltcompensation here ? Or one step earlier?
+        absdiff = abs(lastsonaralt - sonarAlt);
+        if (lastsonaralt != -1 && absdiff > 40)                                       // Too much difference between reads (60ms) that means: 6,7 m/s!!
+        {
+            sonarAlt = -1;
+            SonarStatus = 0;                                                          // 0 = no contact          
+        }
+        
+        // ToDo: Maybe some Tiltcompensation here ? Or earlier?
+        
     }
     else
     {
         sonarAlt    = -1;                                                             // Signalize invalid Sonar
         SonarStatus = 0;                                                              // 0 = no contact
     }
+    lastsonaralt = sonarAlt;                                                          // Store last Sonaralt here for Comparison
+
 // Definition of "SonarStatus" 0 = no contact, 1 = Made first contact, 2 = Had contact but lost it, 3 = Somehow steady contact
 // Perhaps we need some timeouts as well
-    if (LastStatus  == 0 && sonarAlt != -1)                        SonarStatus = 1;   // 1 = made first contact
+    if ((LastStatus == 0 || LastStatus  == 2) && sonarAlt != -1)   SonarStatus = 1;   // 1 = made first contact
     if ((LastStatus == 1 || LastStatus  == 3) && sonarAlt == -1)   SonarStatus = 2;   // 2 = had contact but lost it. Next run Sonarstatus 0    
     if (LastStatus  == 1 && sonarAlt != -1)                        SonarStatus = 3;   // 3 = Signalize steady now. Timer??
 }
 #endif
+
 
 #ifdef MAG
 /* TC notes about mag orientation

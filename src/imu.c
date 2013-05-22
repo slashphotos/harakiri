@@ -350,13 +350,9 @@ void getEstimatedAltitude(bool purge)
     float           BaroClimbRate;
     float           fltmp;
 
-    ThrAngle = TiltValue * 100.0f;
-    if (ThrAngle > 100) ThrAngle = 100;
-    accalt = accalt + VelUP * ACCDeltaTimeINS;
-
     if (!GroundAltInitialized && newbaroalt == 1)                // Do init here
     {
-      if (IniTimer == 0) IniTimer = currentTime + 2000000;
+      if (IniTimer == 0) IniTimer = currentTime + 2000000;       // 2 Secs of warmup
        else
        {
            if (currentTime >=IniTimer)
@@ -367,17 +363,21 @@ void getEstimatedAltitude(bool purge)
        }
     }
 
-    tmp32 = BaroAlt - GroundAlt;
-    if (purge)
+    if (purge)                                                   // Do fast Brainwash, keep Vario
     {
+        tmp32 = BaroAlt - GroundAlt;      
         for (i = 0; i < BaroTabsize; i++) BaroTab[i] = tmp32;    // Set BaroTab to current Alt, don't alter Variotab
         LastEstAltBaro = tmp32;
         accalt = (float)tmp32;
     }
-
+    
+    ThrAngle = TiltValue * 100.0f;
+    if (ThrAngle > 100) ThrAngle = 100;
+    accalt = accalt + VelUP * ACCDeltaTimeINS;
+    
     if (newbaroalt!=0)                                           // MS Baro Timecheck 27ms // BMP085 Timecheck 26ms debug[0] = BaroDeltaTime/1000;
     {
-        BaroTab[Bidx] = tmp32;                                   //BaroAlt - GroundAlt Get EstAltBaro
+        BaroTab[Bidx] = BaroAlt - GroundAlt;                     //BaroAlt - GroundAlt Get EstAltBaro
         Bidx++;
         if (Bidx == BaroTabsize) Bidx = 0;
         tmp32 = 0;

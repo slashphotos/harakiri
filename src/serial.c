@@ -314,8 +314,10 @@ static void evaluateCommand(void)
         break;
     case MSP_ALTITUDE:
         headSerialReply(4);
-        if (!feature(FEATURE_PASS)) serialize32(EstAlt);
-        else serialize32(0);
+        if ((sensors(SENSOR_SONAR) && (SonarStatus == 1 || SonarStatus == 3 )) || feature(FEATURE_PASS))
+            serialize32(0);
+        else
+            serialize32(EstAlt);
         break;
     case MSP_BAT:
         headSerialReply(3);

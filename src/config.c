@@ -139,8 +139,10 @@ static void resetConf(void)
     featureSet(FEATURE_PPM);                    // Crashpilot
 //    featureSet(FEATURE_FAILSAFE);               // Crashpilot
     featureSet(FEATURE_LCD);                    // Crashpilot
-    featureSet(FEATURE_GPS);                    // Crashpilot
+//    featureSet(FEATURE_GPS);                    // Crashpilot
 //    featureSet(FEATURE_PASS);                   // Just pass Throttlechannel Crashpilot
+    featureSet(FEATURE_SONAR);
+
 
     cfg.P8[ROLL]                  = 40;
     cfg.I8[ROLL]                  = 20;
@@ -326,10 +328,10 @@ static void resetConf(void)
     cfg.LED_Toggle_Delay          = 0x08; 	    // slow down LED_Pattern
 
     // Sonar Stuff
-    cfg.SONAR_Pinout              = 1;          // cGiesen: rc78// 0=PWM56  1=RC78 2=I2C (DaddyW)
-    cfg.sonar_min                 = 50;         // Valid Sonar minimal range in cm (0-200)
+    cfg.SONAR_Pinout              = 0;          // cGiesen: rc78// 0=PWM56  1=RC78 2=I2C (DaddyW)
+    cfg.sonar_min                 = 1;          // Valid Sonar minimal range in cm (0-200)
     cfg.sonar_max                 = 200;        // Valid Sonar maximal range in cm (0-700)
-    cfg.sonar_debug               = 0;          // 1 Sends Sonardata within sonar_min/max in debug[0] when Baro is activated
+    cfg.sonar_debug               = 1;          // 1 Sends Sonardata within sonar_min/max in debug[0] when Baro is activated
 
     // custom mixer. clear by defaults.
     for (i = 0; i < MAX_MOTORS; i++) cfg.customMixer[i].throttle = 0.0f;
