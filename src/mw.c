@@ -988,15 +988,15 @@ void loop(void)
                 break;
             case 1:                                                  // 1 = Made first contact
                 BaroAlt  = sonarAlt;                                 // Reset the Altholdstuff to the Sonarinput
-                getEstimatedAltitude(true);                          // Purge Buffer with "Baroalt" get some weird EstAlt users can bitch about in GUI
-                AltHold8 = EstAlt * 8;
+                getEstimatedAltitude(true);                          // Purge Buffer with "Baroalt" get some weird EstAlt
                 AltHold  = EstAlt;
+                AltHold8 = AltHold * 8;
                 initialThrottleHold = LastAltThrottle;               // Freeze throttle
                 break;
             case 2:                                                  // 2 = Had contact but lost it
                 getEstimatedAltitude(true);                          // Purge Buffer with true Baroalt
-                AltHold8 = EstAlt * 8;                               // Reset the Altholdstuff to Baro
                 AltHold  = EstAlt;
+                AltHold8 = AltHold * 8;
                 initialThrottleHold = LastAltThrottle;               // Freeze throttle
                 break;
             case 3:                                                  // 3 = Somehow steady contact
@@ -1005,7 +1005,7 @@ void loop(void)
                 break;
             }
         }
-        else getEstimatedAltitude(false);                            // Keep running and buffer filled, if suddenly needed        
+        else getEstimatedAltitude(false);                            // Keep running and buffer filled, if suddenly needed
     }
 
     if (sensors(SENSOR_BARO) && !sensors(SENSOR_SONAR))              // The normal stuff to keep it simple
@@ -1080,6 +1080,7 @@ void loop(void)
             }
         }                                                                                                                     // End of X Hz Loop
         AltHold = AltHold8 >> 3;                                                                                              // Althold8 is remanent from my mwii project, will be replaced
+        if (AutolandState != 0) BaroD = 0;                                                                                    // Don't do Throttle angle correction when autolanding
         rcCommand[THROTTLE] = constrain(initialThrottleHold + BaroP + BaroD - BaroI,cfg.minthrottle,cfg.maxthrottle);
         LastAltThrottle = rcCommand[THROTTLE];
     }

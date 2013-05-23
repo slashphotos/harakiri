@@ -493,35 +493,41 @@ void Sonar_init(void)                    // cfg.SONAR_Pinout  0=PWM56  1=RC78 2=
 
 void Sonar_update(void)
 {
-    static int16_t lastsonaralt;
+    static int16_t  lastsonaralt;
+    static uint32_t AcceptNewTimer;
     uint8_t LastStatus = SonarStatus;                                                 // Save Last Status here for comparison
     int16_t absdiff;
   
     if (cfg.SONAR_Pinout != 2) hcsr04_get_distance(&sonarAlt);
     else hcsr04_get_i2c_distance(&sonarAlt);
 
+    // ToDo: Maybe some Tiltcompensation here ?
+    // TiltValue in rad.
     if (sonarAlt > cfg.sonar_min && sonarAlt < cfg.sonar_max && GroundAltInitialized) // Let Baro do it's Groundaltstuff first
     {
         absdiff = abs(lastsonaralt - sonarAlt);
         if (lastsonaralt != -1 && absdiff > 40)                                       // Too much difference between reads (60ms) that means: 6,7 m/s!!
         {
             sonarAlt = -1;
+            AcceptNewTimer = 0;
             SonarStatus = 0;                                                          // 0 = no contact          
         }
-        
-        // ToDo: Maybe some Tiltcompensation here ? Or earlier?
-        
     }
     else
     {
         sonarAlt    = -1;                                                             // Signalize invalid Sonar
+        AcceptNewTimer = 0;
         SonarStatus = 0;                                                              // 0 = no contact
     }
     lastsonaralt = sonarAlt;                                                          // Store last Sonaralt here for Comparison
 
 // Definition of "SonarStatus" 0 = no contact, 1 = Made first contact, 2 = Had contact but lost it, 3 = Somehow steady contact
 // Perhaps we need some timeouts as well
-    if ((LastStatus == 0 || LastStatus  == 2) && sonarAlt != -1)   SonarStatus = 1;   // 1 = made first contact
+//    if ((LastStatus == 0 || LastStatus  == 2) && sonarAlt != -1)   SonarStatus = 1;   // 1 = made first contact
+    if ((LastStatus == 0 || LastStatus  == 2) && sonarAlt != -1 && AcceptNewTimer == 0)
+        AcceptNewTimer = currentTime + 200000;                                        // Set 200 ms before accepting new Sonar contact
+    if ((LastStatus == 0 || LastStatus  == 2) && AcceptNewTimer !=0 && currentTime >= AcceptNewTimer)
+        SonarStatus = 1;                                                              // 1 = made first contact
     if ((LastStatus == 1 || LastStatus  == 3) && sonarAlt == -1)   SonarStatus = 2;   // 2 = had contact but lost it. Next run Sonarstatus 0    
     if (LastStatus  == 1 && sonarAlt != -1)                        SonarStatus = 3;   // 3 = Signalize steady now. Timer??
 }
