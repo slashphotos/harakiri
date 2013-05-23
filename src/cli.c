@@ -191,6 +191,7 @@ const clivalue_t valueTable[] =
     { "accz_vel_cf",               VAR_FLOAT,  &cfg.accz_vel_cf,                 0,          1, 1 },
     { "accz_alt_cf",               VAR_FLOAT,  &cfg.accz_alt_cf,                 0,          1, 1 },
     { "baro_lag",                  VAR_FLOAT,  &cfg.baro_lag,                    0,         10, 1 },
+    { "baro_sonar_cf",             VAR_FLOAT,  &cfg.baro_sonar_cf,               0,          1, 1 },
     { "barodownscale",             VAR_FLOAT,  &cfg.barodownscale,               0,          1, 1 },
     { "nazedebug",                 VAR_UINT8,  &cfg.nazedebug,                   0,          5, 0 },
     { "moron_threshold",           VAR_UINT8,  &cfg.moron_threshold,             0,        128, 0 },
@@ -251,7 +252,8 @@ const clivalue_t valueTable[] =
     { "SONAR_Pinout",              VAR_UINT8,  &cfg.SONAR_Pinout,                0,          2, 0 },
     { "sonar_min",                 VAR_UINT8,  &cfg.sonar_min,                   0,        200, 1 },
     { "sonar_max",                 VAR_UINT16, &cfg.sonar_max,                   0,        700, 1 },
-    { "sonar_debug",               VAR_UINT8,  &cfg.sonar_debug,                 0,          1, 1 },    
+    { "sonar_debug",               VAR_UINT8,  &cfg.sonar_debug,                 0,          1, 1 },
+    { "sonar_tilt",                VAR_UINT8,  &cfg.sonar_tilt,                 10,         50, 1 },    
     { "LED_Type",                  VAR_UINT8,  &cfg.LED_Type,                    0,          3, 0 },
     { "LED_pinout",                VAR_UINT8,  &cfg.LED_Pinout,                  0,          1, 0 },
     { "LED_ControlChannel",        VAR_UINT8,  &cfg.LED_ControlChannel,          1,         12, 0 }, // Aux Channel to controll the LED Pattern

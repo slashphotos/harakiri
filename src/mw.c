@@ -35,7 +35,7 @@ float    magneticDeclination;
 // **********************
 // SONAR
 // **********************
-uint8_t  SonarStatus = 0;                                            // 0 = no contact, 1 = made contact, 2 = had contact but lost it, 3 = steady contact
+uint8_t  SonarStatus = 0;                                            // 0 = no contact, 1 = made contact, 2 = steady contact
 
 // **********************
 // GPS
@@ -461,7 +461,6 @@ void loop(void)
     static int16_t  initialThrottleHold;
     uint32_t        auxState = 0;
     float           prop;
-    static uint8_t  taskOrder = 0;
     static uint32_t AltRCTimer0;
     static int32_t  AltHold8;
     static uint8_t  ThrFstTimeCenter;
@@ -948,27 +947,17 @@ void loop(void)
     }
     else                                                             // not in 50Hz rc loop
     {
-        if (taskOrder > 1) taskOrder = 0;                            // never call all function in the same loop, to avoid high delay spikes
-        switch (taskOrder)
-        {
-        case 0:
-            taskOrder++;
-            break;
-        case 1:
-#ifdef SONAR
-            if (sensors(SENSOR_SONAR))
-            {
-                Sonar_update();                                      // And update "SonarStatus"
-                if (cfg.sonar_debug == 1)
-                    debug[0] = sonarAlt;
-                    debug[1] = SonarStatus;
-            }
-#endif
-            taskOrder++;
-            break;
-        }
+                                                                     // Here was taskordershit
     }
 
+#ifdef SONAR
+    if (sensors(SENSOR_SONAR))
+    {
+        Sonar_update();                                              // And update "SonarStatus"
+        if (cfg.sonar_debug == 1) debug[0] = sonarAlt;
+    }
+#endif
+    
 #ifdef MAG
     if (sensors(SENSOR_MAG)) Mag_getADC();
 #endif
@@ -976,44 +965,11 @@ void loop(void)
     computeIMU();
     
 #ifdef BARO
-    if (sensors(SENSOR_BARO) && sensors(SENSOR_SONAR))               // The ugly stuff
-    {
-        Baro_update();                                               // Keep running and buffer filled, produce BaroAlt
-        if (f.BARO_MODE == 1)                                        // Only do this, if we are actually in althold
-        {
-            switch (SonarStatus)
-            {
-            case 0:                                                  // 0 = no contact
-                getEstimatedAltitude(false);                         // Keep doing the normal stuff
-                break;
-            case 1:                                                  // 1 = Made first contact
-                BaroAlt  = sonarAlt;                                 // Reset the Altholdstuff to the Sonarinput
-                getEstimatedAltitude(true);                          // Purge Buffer with "Baroalt" get some weird EstAlt
-                AltHold  = EstAlt;
-                AltHold8 = AltHold * 8;
-                initialThrottleHold = LastAltThrottle;               // Freeze throttle
-                break;
-            case 2:                                                  // 2 = Had contact but lost it
-                getEstimatedAltitude(true);                          // Purge Buffer with true Baroalt
-                AltHold  = EstAlt;
-                AltHold8 = AltHold * 8;
-                initialThrottleHold = LastAltThrottle;               // Freeze throttle
-                break;
-            case 3:                                                  // 3 = Somehow steady contact
-                BaroAlt  = sonarAlt;                                 // Keep on using Sonarinput instead of Baro
-                getEstimatedAltitude(false);
-                break;
-            }
-        }
-        else getEstimatedAltitude(false);                            // Keep running and buffer filled, if suddenly needed
-    }
-
-    if (sensors(SENSOR_BARO) && !sensors(SENSOR_SONAR))              // The normal stuff to keep it simple
+    if (sensors(SENSOR_BARO))                                        // The normal stuff to keep it simple
     {
         Baro_update();
-        getEstimatedAltitude(false);
+        getEstimatedAltitude();
     }
-    
     
 //#define AutolandRate 64                                            // 40cm/sec (64/8*5)
 #define HoverTimeBeforeLand 2000000                                  // Wait 2 sec in the air for VirtualThrottle to catch up
@@ -1043,6 +999,7 @@ void loop(void)
             if (LastAltThrottle == cfg.minthrottle && AutolandGeneralTimer == 0 ) AutolandGeneralTimer = currentTime + HasLandedTimeCheck;
             if (LastAltThrottle > cfg.minthrottle) AutolandGeneralTimer = 0; // Reset Timer
             if (AutolandGeneralTimer != 0 && currentTime > AutolandGeneralTimer) AutolandState++;
+            if (TiltValue < 0)  AutolandState++;                     // Proceed to disarm if copter upside down
             break;
         case 5:                                                      // Shut down Copter forever....
             DisArmCopter();

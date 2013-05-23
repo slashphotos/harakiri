@@ -13,7 +13,7 @@ int16_t         BaroP;
 int16_t         BaroI;
 int16_t         BaroD;
 uint8_t         newbaroalt;
-bool            GroundAltInitialized;
+bool            GroundAltInitialized = false;
 static int32_t  GroundAlt;
 static uint16_t ACCDeltaTime;
 uint16_t        BaroDeltaTime;
@@ -336,13 +336,14 @@ static void getEstimatedAttitude(void)
 
 #define VarioTabsize 8
 #define BaroTabsize 5
-void getEstimatedAltitude(bool purge)
+void getEstimatedAltitude(void)
 {
     static uint8_t  Vidx,Bidx;
     static int32_t  LastEstAltBaro;
     static uint32_t IniTimer = 0;
     static float    VarioTab[VarioTabsize];
     static int32_t  BaroTab[BaroTabsize];
+    static int32_t  Sonarcorrector;
     static float    accalt;
     uint8_t         i, ThrAngle;
     int32_t         tmp32;
@@ -362,19 +363,17 @@ void getEstimatedAltitude(bool purge)
            }
        }
     }
-
-    if (purge)                                                   // Do fast Brainwash, keep Vario
+    if (sensors(SENSOR_SONAR) && SonarStatus !=0)                // SonarStatus is set according GroundAltInitialized in sensors
     {
-        tmp32 = BaroAlt - GroundAlt;      
-        for (i = 0; i < BaroTabsize; i++) BaroTab[i] = tmp32;    // Set BaroTab to current Alt, don't alter Variotab
-        LastEstAltBaro = tmp32;
-        accalt = (float)tmp32;
+        if(SonarStatus == 1)                                     // First contact
+            Sonarcorrector = EstAlt + GroundAlt - (int32_t)sonarAlt; // Calculate Correctionfaktor
+        else if (newbaroalt!=0)                                  // We have steady contact, but do we have new barovals as well ?
+            BaroAlt = (float)(Sonarcorrector + (int32_t)sonarAlt) * cfg.baro_sonar_cf + (float)BaroAlt * (1 - cfg.baro_sonar_cf); // Set weight / make transition smoother
     }
-    
-    ThrAngle = TiltValue * 100.0f;
-    if (ThrAngle > 100) ThrAngle = 100;
+    else Sonarcorrector = 0;                                     // This line is obsolete, but i like my variables set to 0 if state unknown
+
+    ThrAngle = constrain(TiltValue * 100.0f,0,100);
     accalt = accalt + VelUP * ACCDeltaTimeINS;
-    
     if (newbaroalt!=0)                                           // MS Baro Timecheck 27ms // BMP085 Timecheck 26ms debug[0] = BaroDeltaTime/1000;
     {
         BaroTab[Bidx] = BaroAlt - GroundAlt;                     //BaroAlt - GroundAlt Get EstAltBaro

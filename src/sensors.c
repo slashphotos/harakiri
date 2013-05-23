@@ -111,8 +111,6 @@ retry:
     else sensorsClear(SENSOR_BARO);
 #endif
     
-    GroundAltInitialized = false;
-    
     // Now time to init things, acc first
     if (sensors(SENSOR_ACC))
         acc.init();
@@ -496,17 +494,19 @@ void Sonar_update(void)
     static int16_t  lastsonaralt;
     static uint32_t AcceptNewTimer;
     uint8_t LastStatus = SonarStatus;                                                 // Save Last Status here for comparison
-    int16_t absdiff;
+    int16_t tmp16;
   
-    if (cfg.SONAR_Pinout != 2) hcsr04_get_distance(&sonarAlt);
+    if (cfg.SONAR_Pinout != 2) hcsr04_get_distance(&sonarAlt);                        // Aquire Data, maybe old are re - read
     else hcsr04_get_i2c_distance(&sonarAlt);
 
-    // ToDo: Maybe some Tiltcompensation here ?
-    // TiltValue in rad.
+    tmp16 = 100 - constrain(TiltValue * 100.0f,0,100);                                // We don't care for upsidedownstuff, because althold is disabled than anyways
+    if (tmp16 > cfg.sonar_tilt) sonarAlt = -1;                                        // Error if too tilted, deal with it below
+    if (cfg.sonar_debug == 1) debug[1] = tmp16;                                       // Prints out Tiltangle, but actually not degrees, 90 Degrees will be 100
+
     if (sonarAlt > cfg.sonar_min && sonarAlt < cfg.sonar_max && GroundAltInitialized) // Let Baro do it's Groundaltstuff first
     {
-        absdiff = abs(lastsonaralt - sonarAlt);
-        if (lastsonaralt != -1 && absdiff > 40)                                       // Too much difference between reads (60ms) that means: 6,7 m/s!!
+        tmp16 = abs(lastsonaralt - sonarAlt);
+        if (lastsonaralt != -1 && tmp16 > 40)                                         // Too much difference between reads (60ms) "40" would mean: 6,7 m/s!!
         {
             sonarAlt = -1;
             AcceptNewTimer = 0;
@@ -515,21 +515,16 @@ void Sonar_update(void)
     }
     else
     {
-        sonarAlt    = -1;                                                             // Signalize invalid Sonar
+        sonarAlt       = -1;                                                          // Signalize invalid Sonar
         AcceptNewTimer = 0;
-        SonarStatus = 0;                                                              // 0 = no contact
+        SonarStatus    = 0;                                                           // 0 = no contact
     }
     lastsonaralt = sonarAlt;                                                          // Store last Sonaralt here for Comparison
-
-// Definition of "SonarStatus" 0 = no contact, 1 = Made first contact, 2 = Had contact but lost it, 3 = Somehow steady contact
-// Perhaps we need some timeouts as well
-//    if ((LastStatus == 0 || LastStatus  == 2) && sonarAlt != -1)   SonarStatus = 1;   // 1 = made first contact
-    if ((LastStatus == 0 || LastStatus  == 2) && sonarAlt != -1 && AcceptNewTimer == 0)
+    if (LastStatus == 0 && sonarAlt != -1) SonarStatus = 1;                           // Definition of "SonarStatus" 0 = no contact, 1 = Made first contact, 2 = Steady contact
+    if (LastStatus == 1 && sonarAlt != -1 && AcceptNewTimer == 0)
         AcceptNewTimer = currentTime + 200000;                                        // Set 200 ms before accepting new Sonar contact
-    if ((LastStatus == 0 || LastStatus  == 2) && AcceptNewTimer !=0 && currentTime >= AcceptNewTimer)
-        SonarStatus = 1;                                                              // 1 = made first contact
-    if ((LastStatus == 1 || LastStatus  == 3) && sonarAlt == -1)   SonarStatus = 2;   // 2 = had contact but lost it. Next run Sonarstatus 0    
-    if (LastStatus  == 1 && sonarAlt != -1)                        SonarStatus = 3;   // 3 = Signalize steady now. Timer??
+    if (AcceptNewTimer !=0 && currentTime >= AcceptNewTimer)
+        SonarStatus = 2;
 }
 #endif
 

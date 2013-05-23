@@ -212,6 +212,7 @@ static void resetConf(void)
     cfg.accz_vel_cf               = 0.985f;     // Crashpilot: Value for complementary filter accz and barovelocity
     cfg.accz_alt_cf               = 0.940f;     // Crashpilot: Value for complementary filter accz and altitude
     cfg.baro_lag                  = 0.3f;       // Lag of Baro
+    cfg.baro_sonar_cf             = 0.8f;       // The bigger, the more Sonarinfluence
     cfg.barodownscale             = 0.7f;       // Scale downmovement down (because copter drops faster than rising)
     // Autoland
     cfg.autolandrate              = 80;         // Temporary value "64" increase to increase Landingspeed
@@ -332,6 +333,7 @@ static void resetConf(void)
     cfg.sonar_min                 = 1;          // Valid Sonar minimal range in cm (0-200)
     cfg.sonar_max                 = 200;        // Valid Sonar maximal range in cm (0-700)
     cfg.sonar_debug               = 1;          // 1 Sends Sonardata within sonar_min/max in debug[0] when Baro is activated
+    cfg.sonar_tilt                = 30;         // Somehow copter tiltrange in degrees (not exactly) in wich Sonar is possible
 
     // custom mixer. clear by defaults.
     for (i = 0; i < MAX_MOTORS; i++) cfg.customMixer[i].throttle = 0.0f;

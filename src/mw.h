@@ -174,6 +174,7 @@ typedef struct config_t
     float    accz_vel_cf;                   // Crashpilot: Value for complementary filter accz and barovelocity
     float    accz_alt_cf;                   // Crashpilot: Value for complementary filter accz and altitude
     float    baro_lag;                      // Lag of Baro
+    float    baro_sonar_cf;                 // The bigger, the more Sonarinfluence
     float    barodownscale;                 // Scale downmovement down
     uint8_t  nazedebug;                     // Crashpilot: 1 = Debug Barovalues
     uint8_t  moron_threshold;               // people keep forgetting that moving model while init results in wrong gyro offsets. and then they never reset gyro. so this is now on by default.
@@ -293,6 +294,7 @@ typedef struct config_t
     uint8_t  sonar_min;                     // Valid Sonar minimal range in cm (0-200)
     uint16_t sonar_max;                     // Valid Sonar maximal range in cm (0-700)
     uint8_t  sonar_debug;                   // 1 Sets Sonardata within sonar_min/max in debug[0]
+    uint8_t  sonar_tilt;                    // Somehow copter tiltrange in degrees (not exactly) in wich Sonar is possible
 
     motorMixer_t customMixer[MAX_MOTORS];   // custom mixtable
     uint8_t  magic_ef;                      // magic number, should be 0xEF
@@ -369,7 +371,7 @@ extern float    magHold;
 extern float    magneticDeclination;
 
 // Sonar
-extern uint8_t  SonarStatus;                // 0 = no contact, 1 = made contact, 2 = had contact but lost it, 3 = steady contact
+extern uint8_t  SonarStatus;                // 0 = no contact, 1 = made contact, 2 = steady contact
 
 // GPS stuff
 extern int32_t  GPS_coord[2];
@@ -417,7 +419,7 @@ void imuInit(void);
 void annexCode(void);
 void computeIMU(void);
 void blinkLED(uint8_t num, uint8_t wait, uint8_t repeat);
-void getEstimatedAltitude(bool purge);
+void getEstimatedAltitude(void);
 
 // Sensors
 void sensorsAutodetect(void);
