@@ -478,10 +478,10 @@ static void cliCMix(char *cmdline)
 
     if (len == 0) {
         uartPrint("Custom mixer: \r\nMotor\tThr\tRoll\tPitch\tYaw\r\n");
-        for (i = 0; i < MAX_MOTORS; i++) {
+        for (i = 0; i < MAX_MOTORS; i++)
+        {
             if (cfg.customMixer[i].throttle == 0.0f)
                 break;
-            mixsum[i] = 0.0f;
             num_motors++;
             printf("#%d:\t", i + 1);
             printf("%s\t", ftoa(cfg.customMixer[i].throttle, buf));
@@ -489,7 +489,10 @@ static void cliCMix(char *cmdline)
             printf("%s\t", ftoa(cfg.customMixer[i].pitch, buf));
             printf("%s\r\n", ftoa(cfg.customMixer[i].yaw, buf));
         }
-        for (i = 0; i < num_motors; i++) {
+        for (i = 0; i < 3; i++)
+            mixsum[i] = 0.0f;
+        for (i = 0; i < num_motors; i++)
+        {
             mixsum[0] += cfg.customMixer[i].roll;
             mixsum[1] += cfg.customMixer[i].pitch;
             mixsum[2] += cfg.customMixer[i].yaw;
