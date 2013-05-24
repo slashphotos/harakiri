@@ -211,8 +211,8 @@ static void resetConf(void)
     cfg.gyro_lpf                  = 42;         // Possible values 256 188 98 42 20 10 (HZ)
     cfg.accz_vel_cf               = 0.985f;     // Crashpilot: Value for complementary filter accz and barovelocity
     cfg.accz_alt_cf               = 0.940f;     // Crashpilot: Value for complementary filter accz and altitude
-    cfg.baro_lag                  = 0.3f;       // Lag of Baro
-    cfg.baro_sonar_cf             = 0.8f;       // The bigger, the more Sonarinfluence
+    cfg.baro_lag                  = 0.3f;       // Lag of Baro/Althold stuff in general, makes stop in hightchange snappier
+    cfg.baro_sonar_cf             = 0.9f;       // The bigger, the more Sonarinfluence, makes switch between them smoother and baroinfluence in sonarmode
     cfg.barodownscale             = 0.7f;       // Scale downmovement down (because copter drops faster than rising)
     // Autoland
     cfg.autolandrate              = 80;         // Temporary value "64" increase to increase Landingspeed
@@ -242,8 +242,8 @@ static void resetConf(void)
 
     // Motor/ESC/Servo
 //    cfg.minthrottle               = 1150;       // ORIG
-    cfg.minthrottle               = 1220;
-//	  cfg.minthrottle               = 1080;
+//    cfg.minthrottle               = 1220;
+	  cfg.minthrottle               = 1080;
     cfg.maxthrottle               = 1950;
     cfg.passmotor                 = 0;          // Crashpilot: Only used with feature pass. If 0 = all Motors, otherwise specific Motor
     cfg.mincommand                = 1000;
@@ -300,7 +300,7 @@ static void resetConf(void)
     cfg.gps_rtl_flyaway           = 0;          // 0 Disables. If during RTL the distance increases beyond this value (in meters), something is wrong, autoland
     cfg.gps_yaw                   = 30;         // Thats the MAG P during GPS functions, substitute for "cfg.P8[PIDMAG]"
     cfg.nav_rtl_lastturn          = 1;          // 1 = when copter gets to home position it rotates it's head to takeoff direction independend of nav_controls_heading
-    cfg.nav_slew_rate             = 50;         // 0 Enables Spikefilter // was 30 and 50 before
+    cfg.nav_slew_rate             = 50;         // was 30 and 50 before
     cfg.nav_tail_first            = 0;          // 1 = Copter comes back with ass first (only works with nav_controls_heading = 1)
 //    cfg.nav_tail_first            = 1;          // 1 = Copter comes back with ass first (only works with nav_controls_heading = 1)
     cfg.nav_controls_heading      = 1;          // 1 = Nav controls YAW during WP ONLY
@@ -329,10 +329,10 @@ static void resetConf(void)
     cfg.LED_Toggle_Delay          = 0x08; 	    // slow down LED_Pattern
 
     // Sonar Stuff
-    cfg.SONAR_Pinout              = 0;          // cGiesen: rc78// 0=PWM56  1=RC78 2=I2C (DaddyW)
-    cfg.sonar_min                 = 1;          // Valid Sonar minimal range in cm (0-200)
+    cfg.SONAR_Pinout              = 0;          // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross)
+    cfg.sonar_min                 = 0;          // Valid Sonar minimal range in cm (0-200)
     cfg.sonar_max                 = 200;        // Valid Sonar maximal range in cm (0-700)
-    cfg.sonar_debug               = 1;          // 1 Sends Sonardata within sonar_min/max in debug[0] when Baro is activated
+    cfg.sonar_debug               = 0;          // 1 Sends Sonardata to debug[0] and tiltvalue to debug[1]
     cfg.sonar_tilt                = 30;         // Somehow copter tiltrange in degrees (not exactly) in wich Sonar is possible
 
     // custom mixer. clear by defaults.

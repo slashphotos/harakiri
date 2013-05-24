@@ -99,6 +99,7 @@ int main(void)
     
     if (feature(FEATURE_PPM))
     {
+#ifdef SONAR
         if (feature(FEATURE_SONAR))
         {
             switch (cfg.SONAR_Pinout)         // cfg.SONAR_Pinout  0=PWM56  1=RC78 2=I2C (DaddyW)
@@ -111,6 +112,7 @@ int main(void)
                 break;
             }
         }
+#endif
         if (feature(FEATURE_LED) && (cfg.LED_Type == 2))
         {
             if (cfg.LED_Pinout == 0) pwm_params.useRC5 = true;
@@ -154,7 +156,7 @@ int main(void)
 #ifdef SONAR                         // I2C Sonar stuff always works. Why can't we use here PWM56 as well?
         if (feature(FEATURE_SONAR) && cfg.SONAR_Pinout == 2)
             Sonar_init();
-#endif      
+#endif
         if (feature(FEATURE_PPM))
         {
 #ifdef SONAR                         // Other Sonars are only done with PPM

@@ -12,18 +12,30 @@
  *
  */
 
-#define SONAR_ADDRESS           0x20  // DaddyW I2C SONAR, Standard address 0x20 to 0x27  7bit!!!
-#define SONAR_DISTANCE_OUT      0x32
-#define SONAR_ADC_OUT           0x33
+/*
+Currently supported Sonars: (the links are just examples, I didn't buy them there)
+HC-SR04 (google that, price around 5$ range about 2m
 
-static uint16_t trigger_pin;
-static uint16_t echo_pin;
-static uint32_t exti_line;
-static uint8_t exti_pin_source;
+DaddyWalross did an I2C "pimp" of the HC-SR04 with the idea in mind to connect several modules at once:
+http://fpv-community.de/showthread.php?20988-I%B2C-Sonarplatinen
+
+ToDo:
+Maxbotics Sonars with analog readout (expensive stuff, probably some people have them from APM)
+SRF10 is I2C http://www.shop.robotikhardware.de/shop/catalog/product_info.php?products_id=121
+
+*/
+
+#define SONARDW_ADDRESS           0x20  // DaddyW I2C SONAR, Standard address 0x20 to 0x27  7bit!!!
+#define SONARDW_DISTANCE_OUT      0x32  // NOT USED HERE #define SONARDW_ADC_OUT           0x33
+
+static uint16_t  trigger_pin;
+static uint16_t  echo_pin;
+static uint32_t  exti_line;
+static uint8_t   exti_pin_source;
 static IRQn_Type exti_irqn;
 
-static uint32_t last_measurement;
-static volatile int16_t* distance_ptr;
+static uint32_t  last_measurement;
+static volatile  int16_t* distance_ptr;
 
 void ECHO_EXTI_IRQHandler(void)
 {
@@ -86,12 +98,12 @@ bool hcsr04_init(sonar_config_t config)
         exti_irqn = EXTI1_IRQn;
         returnvalue = true;
         break;
-    case sonar_i2c:                                             // Deal with I2C daddy walross sonar
+    case sonar_i2cDW:                                           // Deal with I2C daddy walross sonar
         delay(1000);                                            // sleep for 1000ms to startup sonar
-        returnvalue = i2cRead(SONAR_ADDRESS, SONAR_DISTANCE_OUT, 2, buf);
+        returnvalue = i2cRead(SONARDW_ADDRESS, SONARDW_DISTANCE_OUT, 2, buf);
         break;
     }
-    if (config != sonar_i2c)
+    if (config == sonar_pwm56 || config == sonar_rc78)
     {
         // tp - trigger pin 
         GPIO_InitStructure.GPIO_Pin = trigger_pin;
@@ -111,12 +123,12 @@ bool hcsr04_init(sonar_config_t config)
         EXTIInit.EXTI_LineCmd = ENABLE;    
         EXTI_Init(&EXTIInit);    
         NVIC_EnableIRQ(exti_irqn);
-        last_measurement = millis() - 60;                       // Force 1st measurement in hcsr04_get_distance()      
+        last_measurement = millis() - 60;                       // Force 1st measurement in hcsr04_get_distancePWM()      
     }
     return returnvalue;                                         // Return the status of initialization
 }
 
-void hcsr04_get_distance(volatile int16_t* distance)            // distance calculation is done asynchronously, using interrupt
+void hcsr04_get_distancePWM(volatile int16_t* distance)         // distance calculation is done asynchronously, using interrupt
 {
     uint32_t current_time = millis();
     if( current_time < (last_measurement + 60) ) return;        // repeat interval should be greater 60ms. Avoid interference between measurements.
@@ -127,11 +139,11 @@ void hcsr04_get_distance(volatile int16_t* distance)            // distance calc
     GPIO_ResetBits(GPIOB, trigger_pin);
 }
 
-void hcsr04_get_i2c_distance(volatile int16_t* distance)
+void hcsr04_get_i2c_distanceDW(volatile int16_t* distance)
 {
     uint8_t buf[2];
     int16_t temp;
-    if(i2cRead(SONAR_ADDRESS, SONAR_DISTANCE_OUT, 2, buf))
+    if(i2cRead(SONARDW_ADDRESS, SONARDW_DISTANCE_OUT, 2, buf))
     {
         temp = (int16_t)((buf[1] << 8) | buf[0]);
         *distance = temp / 58;

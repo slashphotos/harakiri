@@ -482,7 +482,7 @@ void Sonar_init(void)                    // cfg.SONAR_Pinout  0=PWM56  1=RC78 2=
         Inisuccess = hcsr04_init(sonar_rc78);
         break;
     case 2:
-        Inisuccess = hcsr04_init(sonar_i2c);
+        Inisuccess = hcsr04_init(sonar_i2cDW);
         break;
     }
     if (Inisuccess) sensorsSet(SENSOR_SONAR);
@@ -491,26 +491,36 @@ void Sonar_init(void)                    // cfg.SONAR_Pinout  0=PWM56  1=RC78 2=
 
 void Sonar_update(void)
 {
-    static int16_t  lastsonaralt;
-    static uint32_t AcceptNewTimer;
+    static  int16_t  lastsonaralt;
+    static  uint32_t AcceptNewTimer;
+    uint8_t utmp8;
     uint8_t LastStatus = SonarStatus;                                                 // Save Last Status here for comparison
-    int16_t tmp16;
-  
-    if (cfg.SONAR_Pinout != 2) hcsr04_get_distance(&sonarAlt);                        // Aquire Data, maybe old are re - read
-    else hcsr04_get_i2c_distance(&sonarAlt);
 
-    tmp16 = 100 - constrain(TiltValue * 100.0f,0,100);                                // We don't care for upsidedownstuff, because althold is disabled than anyways
-    if (tmp16 > cfg.sonar_tilt) sonarAlt = -1;                                        // Error if too tilted, deal with it below
-    if (cfg.sonar_debug == 1) debug[1] = tmp16;                                       // Prints out Tiltangle, but actually not degrees, 90 Degrees will be 100
+    switch (cfg.SONAR_Pinout)                                                         // Aquire Data, use "switch" for further extensions
+    {
+    case 0:                                                                           // sonar_pwm56
+    case 1:                                                                           // sonar_rc78
+        hcsr04_get_distancePWM(&sonarAlt);
+        break;
+    case 2:
+        hcsr04_get_i2c_distanceDW(&sonarAlt);
+        break;
+    }
+  
+    utmp8 = 100 - constrain(TiltValue * 100.0f,0,100);                                // We don't care for upsidedownstuff, because althold is disabled than anyways
+    if (utmp8 > cfg.sonar_tilt) sonarAlt = -1;                                        // Error if too tilted, deal with it below
+    if (cfg.sonar_debug == 1) debug[1] = utmp8;                                       // Prints out Tiltangle, but actually not degrees, 90 Degrees will be 100
 
     if (sonarAlt > cfg.sonar_min && sonarAlt < cfg.sonar_max && GroundAltInitialized) // Let Baro do it's Groundaltstuff first
     {
-        tmp16 = abs(lastsonaralt - sonarAlt);
-        if (lastsonaralt != -1 && tmp16 > 40)                                         // Too much difference between reads (60ms) "40" would mean: 6,7 m/s!!
+        if (lastsonaralt != -1 && lastsonaralt != sonarAlt)                           // Check for new Data
         {
-            sonarAlt = -1;
-            AcceptNewTimer = 0;
-            SonarStatus = 0;                                                          // 0 = no contact          
+            if (abs(lastsonaralt - sonarAlt) > 20)                                    // Too much difference(cm) between reads (60ms) so "20" is somtehing like 3m/s
+            {
+                sonarAlt = -1;
+                AcceptNewTimer = 0;
+                SonarStatus = 0;                                                      // 0 = no contact          
+            }
         }
     }
     else
@@ -527,7 +537,6 @@ void Sonar_update(void)
         SonarStatus = 2;
 }
 #endif
-
 
 #ifdef MAG
 /* TC notes about mag orientation

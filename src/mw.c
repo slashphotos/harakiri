@@ -970,7 +970,7 @@ void loop(void)
         Baro_update();
         getEstimatedAltitude();
     }
-    
+
 //#define AutolandRate 64                                            // 40cm/sec (64/8*5)
 #define HoverTimeBeforeLand 2000000                                  // Wait 2 sec in the air for VirtualThrottle to catch up
 #define HasLandedTimeCheck 2000000                                   // Timeperiod for idlethrottle before shut off

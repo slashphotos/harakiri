@@ -106,7 +106,7 @@ static bool      GPS_NMEA_newFrame(char c);
 static bool      GPS_MTK_newFrame(uint8_t data);
 static bool      GPS_UBLOX_newFrame(uint8_t data);
 static bool      UBLOX_parse_gps(void);
-static void      SpikefilterGPSOutput(bool reset);
+// static void      SpikefilterGPSOutput(bool reset);
 static void      gpsPrint(const char *str);
 float            wrap_18000(float error);
 static int32_t   wrap_36000(int32_t angle);
@@ -257,7 +257,7 @@ void GPS_alltime(void)
                 break;
             }                                                                      // END Switch nav_mode
 
-            if (cfg.nav_slew_rate == 0) SpikefilterGPSOutput(false);               // Do Spikefilter all the time when no slew rate wanted. Reset is "false"
+//            if (cfg.nav_slew_rate == 0) SpikefilterGPSOutput(false);               // Do Spikefilter all the time when no slew rate wanted. Reset is "false"
         }                                                                          // END of gps calcs i.e navigating
     }
     else GPS_reset_nav();                                                          // END GPS_numSat >= 5
@@ -783,7 +783,7 @@ void GPS_reset_nav(void)                                              //reset na
     waypoint_speed_gov = (float)cfg.nav_speed_min;
     crosstrack_error = 0;
     WP_Fastcorner = false;
-    SpikefilterGPSOutput(true);
+//    SpikefilterGPSOutput(true);
 }
 
 bool DoingGPS(void)
@@ -810,63 +810,6 @@ static void GPS_calc_longitude_scaling()
     OneCmTo[LON] = 1.0f / MagicEarthNumber / CosLatScaleLon;  // Moves EAST  one cm
 }
 
-////////////////////////////////////////////////////////////////////////////////////
-// Crashpilot Spikefilter the GPS Output so a higher slewrate is possible, spikefilter produces minimal lag if any
-void SpikefilterGPSOutput(bool reset)
-{
-    static float nav0[5];
-    static float nav1[5];
-    float        extmp;
-    uint8_t      i;
-
-    if (reset) for (i = 0; i < 5; i++) nav0[i] = nav1[i] = 0;
-    else
-    {
-        uint8_t  rdy,sortidx,maxsortidx;
-        extmp =  nav[0];
-        nav0[4] = extmp;
-        nav0[0] = extmp;
-        extmp =  nav[1];
-        nav1[4] = extmp;
-        nav1[0] = extmp;
-        rdy = 0;
-        maxsortidx=4;
-        while(rdy == 0)
-        {
-            rdy = 1;
-            for (sortidx = 0; sortidx<maxsortidx; sortidx++)
-            {
-                extmp = nav0[sortidx];
-                if (extmp > nav0[sortidx+1])
-                {
-                    nav0[sortidx] = nav0[sortidx+1];
-                    nav0[sortidx+1] = extmp;
-                    rdy = 0;
-                }
-            }
-            maxsortidx --;
-        }
-        rdy = 0;
-        maxsortidx=4;
-        while(rdy == 0)
-        {
-            rdy = 1;
-            for (sortidx = 0; sortidx<maxsortidx; sortidx++)
-            {
-                extmp = nav1[sortidx];
-                if (extmp > nav1[sortidx+1])
-                {
-                    nav1[sortidx] = nav1[sortidx+1];
-                    nav1[sortidx+1] = extmp;
-                    rdy = 0;
-                }
-            }
-            maxsortidx --;
-        }
-        nav[0] = nav0[2];
-        nav[1] = nav1[2];
-    }
-}
 
 float wrap_18000(float error)
 {
@@ -1433,6 +1376,65 @@ bool UBLOX_parse_gps(void)
 }
 
 /*
+
+////////////////////////////////////////////////////////////////////////////////////
+// Crashpilot Spikefilter the GPS Output so a higher slewrate is possible, spikefilter produces minimal lag if any
+void SpikefilterGPSOutput(bool reset)
+{
+    static float nav0[5];
+    static float nav1[5];
+    float        extmp;
+    uint8_t      i;
+
+    if (reset) for (i = 0; i < 5; i++) nav0[i] = nav1[i] = 0;
+    else
+    {
+        uint8_t  rdy,sortidx,maxsortidx;
+        extmp =  nav[0];
+        nav0[4] = extmp;
+        nav0[0] = extmp;
+        extmp =  nav[1];
+        nav1[4] = extmp;
+        nav1[0] = extmp;
+        rdy = 0;
+        maxsortidx=4;
+        while(rdy == 0)
+        {
+            rdy = 1;
+            for (sortidx = 0; sortidx<maxsortidx; sortidx++)
+            {
+                extmp = nav0[sortidx];
+                if (extmp > nav0[sortidx+1])
+                {
+                    nav0[sortidx] = nav0[sortidx+1];
+                    nav0[sortidx+1] = extmp;
+                    rdy = 0;
+                }
+            }
+            maxsortidx --;
+        }
+        rdy = 0;
+        maxsortidx=4;
+        while(rdy == 0)
+        {
+            rdy = 1;
+            for (sortidx = 0; sortidx<maxsortidx; sortidx++)
+            {
+                extmp = nav1[sortidx];
+                if (extmp > nav1[sortidx+1])
+                {
+                    nav1[sortidx] = nav1[sortidx+1];
+                    nav1[sortidx+1] = extmp;
+                    rdy = 0;
+                }
+            }
+            maxsortidx --;
+        }
+        nav[0] = nav0[2];
+        nav[1] = nav1[2];
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////
 // *** DIFFERENT STUFF THAT WORKED AS WELL *** POOL OF CODE THAT MIGHT BECOME USEFUL
 ////////////////////////////////////////////////////////////////////////////////////
