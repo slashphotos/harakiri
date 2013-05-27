@@ -14,17 +14,22 @@ void buzzer(uint8_t warn_vbat)
     static uint8_t warn_runtime = 0;
 
     //=====================  BeeperOn via rcOptions =====================
-    if (rcOptions[BOXBEEPERON]) {       // unconditional beeper on via AUXn switch 
+    if (rcOptions[BOXBEEPERON])         // unconditional beeper on via AUXn switch
+    {
         beeperOnBox = 1;
-    } else {
+    }
+    else
+    {
         beeperOnBox = 0;
     }
     //===================== Beeps for failsafe =====================
-    if (feature(FEATURE_FAILSAFE)) {
-        if (failsafeCnt > (5 * cfg.failsafe_delay) && f.ARMED) {
+    if (feature(FEATURE_FAILSAFE))
+    {
+        if (failsafeCnt > (5 * cfg.failsafe_delay) && f.ARMED)
+        {
             warn_failsafe = 1;      //set failsafe warning level to 1 while landing
             if (failsafeCnt > 5 * (cfg.failsafe_delay + cfg.failsafe_off_delay))
-                warn_failsafe = 2;  //start "find me" signal after landing   
+                warn_failsafe = 2;  //start "find me" signal after landing
         }
         if (failsafeCnt > (5 * cfg.failsafe_delay) && !f.ARMED)
             warn_failsafe = 2;      // tx turned off while motors are off: start "find me" signal
@@ -33,10 +38,14 @@ void buzzer(uint8_t warn_vbat)
     }
 
     //===================== GPS fix notification handling =====================
-    if (sensors(SENSOR_GPS)) {
-        if ((rcOptions[BOXGPSHOME] || rcOptions[BOXGPSHOLD]) && !f.GPS_FIX) {     // if no fix and gps funtion is activated: do warning beeps
+    if (sensors(SENSOR_GPS))
+    {
+        if ((rcOptions[BOXGPSHOME] || rcOptions[BOXGPSHOLD]) && !f.GPS_FIX)       // if no fix and gps funtion is activated: do warning beeps
+        {
             warn_noGPSfix = 1;
-        } else {
+        }
+        else
+        {
             warn_noGPSfix = 0;
         }
     }
@@ -62,7 +71,8 @@ void buzzer(uint8_t warn_vbat)
         beep_code('S','S','M','N');                 // Runtime warning
     else if (toggleBeep > 0)
         beep(50);                                   // fast confirmation beep
-    else { 
+    else
+    {
         buzzerIsOn = 0;
         BEEP_OFF;
     }
@@ -78,31 +88,34 @@ void beep_code(char first, char second, char third, char pause)
     patternChar[1] = second;
     patternChar[2] = third;
     patternChar[3] = pause;
-    switch(patternChar[icnt]) {
-        case 'M': 
-            Duration = 100; 
-            break;
-        case 'L': 
-            Duration = 200; 
-            break;
-        case 'D': 
-            Duration = 2000; 
-            break;
-        case 'N': 
-            Duration = 0; 
-            break;
-        default:
-            Duration = 50; 
-            break;
+    switch(patternChar[icnt])
+    {
+    case 'M':
+        Duration = 100;
+        break;
+    case 'L':
+        Duration = 200;
+        break;
+    case 'D':
+        Duration = 2000;
+        break;
+    case 'N':
+        Duration = 0;
+        break;
+    default:
+        Duration = 50;
+        break;
     }
 
     if (icnt < 3 && Duration != 0)
         beep(Duration);
-    if (icnt >= 3 && (buzzerLastToggleTime < millis() - Duration)) {
+    if (icnt >= 3 && (buzzerLastToggleTime < millis() - Duration))
+    {
         icnt = 0;
         toggleBeep = 0;
     }
-    if (beepDone == 1 || Duration == 0) {
+    if (beepDone == 1 || Duration == 0)
+    {
         if (icnt < 3)
             icnt++;
         beepDone = 0;
@@ -113,11 +126,14 @@ void beep_code(char first, char second, char third, char pause)
 
 static void beep(uint16_t pulse)
 {
-    if (!buzzerIsOn && (millis() >= (buzzerLastToggleTime + 50))) {         // Buzzer is off and long pause time is up -> turn it on
+    if (!buzzerIsOn && (millis() >= (buzzerLastToggleTime + 50)))           // Buzzer is off and long pause time is up -> turn it on
+    {
         buzzerIsOn = 1;
         BEEP_ON;
         buzzerLastToggleTime = millis();      // save the time the buzer turned on
-    } else if (buzzerIsOn && (millis() >= buzzerLastToggleTime + pulse)) {         // Buzzer is on and time is up -> turn it off
+    }
+    else if (buzzerIsOn && (millis() >= buzzerLastToggleTime + pulse))             // Buzzer is on and time is up -> turn it off
+    {
         buzzerIsOn = 0;
         BEEP_OFF;
         buzzerLastToggleTime = millis();

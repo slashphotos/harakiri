@@ -1,0 +1,167 @@
+
+RC_DBAND                                 DEADBAND
+RC_MID                                   MIDRC
+RC_AUXCHS                                AUXCHANNELS
+RC_RATE                                  RC_RATE
+RC_EXPO                                  RC_EXPO
+RC_KILLSWIME                             KILLSWITCHTIME
+RC_FS_DELAY                              FAILSAFE_DELAY
+RC_FS_OFF_DELAY                          FAILSAFE_OFF_DELAY
+RC_FS_THR                                FAILSAFE_THROTTLE
+RC_FS_DEADPILOT                          FAILSAFE_DEADPILOT
+RC_FS_JUSTPH                             FAILSAFE_JUSTPH
+RC_MINCMD                                MINCOMMAND
+RC_MINCHK                                MINCHECK
+RC_MAXCHK                                MAXCHECK
+RC_SPTR_HIRES                            SPEKTRUM_HIRES
+
+THR_MID                                  THR_MID
+THR_EXPO                                 THR_EXPO
+THR_MIN                                  MINTHROTTLE
+THR_MAX                                  MAXTHROTTLE
+THR_ALTHLD_NTL                           ALT_HOLD_THROTTLE_NEUTRAL
+
+VBAT_SCALE                               VBATSCALE
+VBAT_MAXCLVOLT                           VBATMAXCELLVOLTAGE
+VBAT_MINCLVOLT                           VBATMINCELLVOLTAGE
+
+TRI_YAW_MIDDLE                           TRI_YAW_MIDDLE
+TRI_YAW_MIN                              TRI_YAW_MIN
+TRI_YAW_MAX                              TRI_YAW_MAX
+
+WING_LEFT_MIN                            WING_LEFT_MIN
+WING_LEFT_MID                            WING_LEFT_MID
+WING_LEFT_MAX                            WING_LEFT_MAX
+WING_RIGHT_MIN                           WING_RIGHT_MIN
+WING_RIGHT_MID                           WING_RIGHT_MID
+WING_RIGHT_MAX                           WING_RIGHT_MAX
+
+GMBL_FLAGS                               GIMBAL_FLAGS
+GMBL_PITCH_GAIN                          GIMBAL_PITCH_GAIN
+GMBL_ROLL_GAIN                           GIMBAL_ROLL_GAIN
+GMBL_PITCH_MIN                           GIMBAL_PITCH_MIN
+GMBL_PITCH_MAX                           GIMBAL_PITCH_MAX
+GMBL_PITCH_MID                           GIMBAL_PITCH_MID
+GMBL_ROLL_MIN                            GIMBAL_ROLL_MIN
+GMBL_ROLL_MAX                            GIMBAL_ROLL_MAX
+GMBL_ROLL_MID                            GIMBAL_ROLL_MID
+
+GYRO_X_ALIGN                             ALIGN_GYRO_X
+GYRO_Y_ALIGN                             ALIGN_GYRO_Y
+GYRO_Z_ALIGN                             ALIGN_GYRO_Z
+GYRO_LPF                                 GYRO_LPF
+GYRO_CMPF_FACTOR                         GYRO_CMPF_FACTOR
+
+ACC_X_ALIGN                              ALIGN_ACC_X
+ACC_Y_ALIGN                              ALIGN_ACC_Y
+ACC_Z_ALIGN                              ALIGN_ACC_Z
+ACC_HARDWARE                             ACC_HARDWARE
+ACC_LPF_FACTOR                           ACC_LPF_FACTOR
+ACC_INS_LPF                              ACC_INS_LPF
+ACC_TRIM_PITCH                           ACC_TRIM_PITCH
+ACC_TRIM_ROLL                            ACC_TRIM_ROLL
+ACC_Z_VEL_CF                              ACCZ_VEL_CF
+ACC_Z_ALT_CF                              ACCZ_ALT_CF
+
+MAG_X_ALIGN                              ALIGN_MAG_X
+MAG_Y_ALIGN                              ALIGN_MAG_Y
+MAG_Z_ALIGN                              ALIGN_MAG_Z
+MAG_DECL                                 MAG_DECLINATION
+MAG_OLDCALIB                             MAG_OLDCALIB
+
+BARO_LAG                                 BARO_LAG
+BARO_SONAR_CF                            BARO_SONAR_CF
+BARO_DOWNSCALE                           BARODOWNSCALE
+
+GPS_BRATE                                GPS_BAUDRATE
+GPS_TYPE                                 GPS_TYPE
+GPS_INS_VEL                              GPS_INS_VEL
+GPS_LAG                                  GPS_LAG
+GPS_SPEEDFILTER                          GPS_SPEEDFILTER
+GPS_PHASE                                GPS_PHASE
+GPS_PH_MINSAT                            GPS_PH_MINSAT
+GPS_PH_APM                               GPS_PH_APM
+GPS_PH_STLSPD                            GPS_PH_SETTLESPEED
+GPS_PH_TRGTSQRT                          GPS_PH_TARGETSQRT
+GPS_PHMOVE_SPD                           GPS_PHMOVE_SPEED
+GPS_MAXANG                               GPS_MAXANGLE
+GPS_MINANGPRC                            GPS_MINANGLEPERCENT
+GPS_WP_RADIUS                            GPS_WP_RADIUS
+GPS_RTL_MINHGT                           GPS_RTL_MINHIGHT
+GPS_RTL_MINDIST                          GPS_RTL_MINDIST
+GPS_RTL_FLYAWAY                          GPS_RTL_FLYAWAY
+GPS_YAW                                  GPS_YAW
+GPS_POS_P                                GPS_POS_P
+GPS_POS_I                                GPS_POS_I
+GPS_POS_D                                GPS_POS_D
+GPS_POSR_P                               GPS_POSR_P
+GPS_POSR_I                               GPS_POSR_I
+GPS_POSR_D                               GPS_POSR_D
+GPS_NAV_P                                GPS_NAV_P
+GPS_NAV_I                                GPS_NAV_I
+GPS_NAV_D                                GPS_NAV_D
+
+NAV_RTL_LASTTRN                          NAV_RTL_LASTTURN
+NAV_SPEED_MIN                            NAV_SPEED_MIN
+NAV_SPEED_MAX                            NAV_SPEED_MAX
+NAV_SLEW_RATE                            NAV_SLEW_RATE
+NAV_CTRL_HEADNG                          NAV_CONTROLS_HEADING
+NAV_TAIL_FIRST                           NAV_TAIL_FIRST
+NAV_PHDBAND                              PHDEADBAND
+
+PITCH_P                                  P_PITCH
+PITCH_I                                  I_PITCH
+PITCH_D                                  D_PITCH
+PITCH_DIR_L                              PITCH_DIRECTION_L
+PITCH_DIR_R                              PITCH_DIRECTION_R
+
+ROLL_P                                   P_ROLL
+ROLL_I                                   I_ROLL
+ROLL_D                                   D_ROLL
+ROLL_PITCH_RATE                          ROLL_PITCH_RATE
+ROLL_DIR_L                               ROLL_DIRECTION_L
+ROLL_DIR_R                               ROLL_DIRECTION_R
+
+YAW_RATE                                 YAWRATE
+YAW_DBAND                                YAWDEADBAND
+YAW_DIR                                  YAW_DIRECTION
+YAW_P                                    P_YAW
+YAW_I                                    I_YAW
+YAW_D                                    D_YAW
+
+ALT_P                                    P_ALT
+ALT_I                                    I_ALT
+ALT_D                                    D_ALT
+
+LEVEL_P                                  P_LEVEL
+LEVEL_I                                  I_LEVEL
+LEVEL_D                                  D_LEVEL
+
+SONAR_PINOUT                             SONAR_PINOUT
+SONAR_MIN                                SONAR_MIN
+SONAR_MAX                                SONAR_MAX
+SONAR_DEBUG                              SONAR_DEBUG
+SONAR_TILT                               SONAR_TILT
+
+LED_INVERT                               LED_INVERT
+LED_TYPE                                 LED_TYPE
+LED_PINOUT                               LED_PINOUT
+LED_CTRLCH                               LED_CONTROLCHANNEL
+LED_ARMED                                LED_ARMED
+LED_TGL_DELAY                            LED_TOGGLE_DELAY
+LED_PTRN1                                LED_PATTERN1
+LED_PTRN2                                LED_PATTERN2
+LED_PTRN3                                LED_PATTERN3
+
+ETC_AL_RATE                              AUTOLANDRATE
+ETC_NAZEDBG                              NAZEDEBUG
+ETC_MORON_THRH                           MORON_THRESHOLD
+ETC_PASSMOTOR                            PASSMOTOR
+ETC_RTA_ARM                              RETARDED_ARM
+ETC_MOTOR_PWMR                           MOTOR_PWM_RATE
+ETC_SERVO_PWMR                           SERVO_PWM_RATE
+ETC_SERIAL_BAUD                          SERIAL_BAUDRATE
+ETC_PWR_ADC                              POWER_ADC_CHANNEL
+ETC_LOOPTIME                             LOOPTIME
+ETC_OLDCTRLR                             OLDCONTROLLER
+ETC_TELEPROTO                            TELE_PROTOCOL

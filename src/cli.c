@@ -12,7 +12,7 @@ static void cliFeature(char *cmdline);
 static void cliHelp(char *cmdline);
 static void cliMap(char *cmdline);
 static void cliMixer(char *cmdline);
-static void cliSave(char *cmdline);
+void cliSave(char *cmdline);
 static void cliSet(char *cmdline);
 static void cliStatus(char *cmdline);
 static void cliVersion(char *cmdline);
@@ -21,6 +21,7 @@ static void LCDoff(void);
 static void LCDclear(void);
 static void LCDline1(void);
 static void LCDline2(void);
+static void cliScanI2Cbus(char *cmdline);
 
 // from sensors.c
 extern uint8_t batteryCellCount;
@@ -37,40 +38,46 @@ static float _atof(const char *p);
 static char *ftoa(float x, char *floatString);
 
 // sync this with MultiType enum from mw.h
-const char * const mixerNames[] = {
-		"TRI", "QUADP", "QUADX", "BI",
-		"GIMBAL", "Y6", "HEX6",
-		"FLYING_WING", "Y4", "HEX6X", "OCTOX8", "OCTOFLATP", "OCTOFLATX",
-		"AIRPLANE", "HELI_120_CCPM", "HELI_90_DEG", "VTAIL4", "CUSTOM", NULL
+const char * const mixerNames[] =
+{
+    "TRI", "QUADP", "QUADX", "BI",
+    "GIMBAL", "Y6", "HEX6",
+    "FLYING_WING", "Y4", "HEX6X", "OCTOX8", "OCTOFLATP", "OCTOFLATX",
+    "AIRPLANE", "HELI_120_CCPM", "HELI_90_DEG", "VTAIL4", "CUSTOM", NULL
 };
 
 // sync this with AvailableFeatures enum from board.h
-const char * const featureNames[] = {
-		"PPM", "VBAT", "INFLIGHT_ACC_CAL", "SPEKTRUM", "MOTOR_STOP",
-		"SERVO_TILT", "GYRO_SMOOTHING", "LED", "GPS",
-		"FAILSAFE", "SONAR", "TELEMETRY", "PASS", "POWERMETER", "LCD",
-		NULL
+const char * const featureNames[] =
+{
+    "PPM", "VBAT", "INFLIGHT_ACC_CAL", "SPEKTRUM", "MOTOR_STOP",
+    "SERVO_TILT", "GYRO_SMOOTHING", "LED", "GPS",
+    "FAILSAFE", "SONAR", "TELEMETRY", "PASS", "POWERMETER", "LCD",
+    NULL
 };
 
 // sync this with AvailableSensors enum from board.h
-const char * const sensorNames[] = {
+const char * const sensorNames[] =
+{
     "ACC", "BARO", "MAG", "SONAR", "GPS", NULL
 };
 
-// 
-const char * const accNames[] = {
+//
+const char * const accNames[] =
+{
     "", "ADXL345", "MPU6050", "MMA845x", NULL
 };
 
-typedef struct {
+typedef struct
+{
     char *name;
     char *param;
     void (*func)(char *cmdline);
 } clicmd_t;
 
 // should be sorted a..z for bsearch()
-const clicmd_t cmdTable[] = {
-	  { "aux", "feature_name auxflag or blank for list", cliAux },
+const clicmd_t cmdTable[] =
+{
+    { "aux", "feature_name auxflag or blank for list", cliAux },
     { "cmix", "design custom mixer", cliCMix },
     { "defaults", "reset to defaults and reboot", cliDefaults },
     { "dump", "print configurable settings in a pastable form", cliDump },
@@ -80,13 +87,15 @@ const clicmd_t cmdTable[] = {
     { "map", "mapping of rc channel order", cliMap },
     { "mixer", "mixer name or list", cliMixer },
     { "save", "save and reboot", cliSave },
+    { "scani2cbus", "scan for I2C devices", cliScanI2Cbus },
     { "set", "name=value or blank or * for list", cliSet },
     { "status", "show system status", cliStatus },
     { "version", "", cliVersion },
 };
 #define CMD_COUNT (sizeof(cmdTable) / sizeof(cmdTable[0]))
 
-typedef enum {
+typedef enum
+{
     VAR_UINT8,
     VAR_INT8,
     VAR_UINT16,
@@ -95,16 +104,18 @@ typedef enum {
     VAR_FLOAT
 } vartype_e;
 
-typedef struct {
+typedef struct
+{
     const char *name;
     const uint8_t type; // vartype_e
     void *ptr;
     const int32_t min;
     const int32_t max;
-	  const uint8_t lcd; // 1 = Displayed in LCD // 0 = Not displayed
+    const uint8_t lcd; // 1 = Displayed in LCD // 0 = Not displayed
 } clivalue_t;
 
-const clivalue_t valueTable[] = {
+const clivalue_t valueTable[] =
+{
     { "deadband",                  VAR_UINT8,  &cfg.deadband,                    0,         32, 1 },
     { "yawdeadband",               VAR_UINT8,  &cfg.yawdeadband,                 0,        100, 1 },
     { "alt_hold_throttle_neutral", VAR_UINT8,  &cfg.alt_hold_throttle_neutral,   1,        20,  1 },
@@ -160,7 +171,7 @@ const clivalue_t valueTable[] = {
     { "gimbal_roll_min",           VAR_UINT16, &cfg.gimbal_roll_min,           100,       3000, 0 },
     { "gimbal_roll_max",           VAR_UINT16, &cfg.gimbal_roll_max,           100,       3000, 0 },
     { "gimbal_roll_mid",           VAR_UINT16, &cfg.gimbal_roll_mid,           100,       3000, 0 },
-    { "autolandrate",              VAR_UINT8,  &cfg.autolandrate,               30,        200, 1 },		
+    { "autolandrate",              VAR_UINT8,  &cfg.autolandrate,               30,        200, 1 },
     { "align_gyro_x",              VAR_INT8,   &cfg.align[ALIGN_GYRO][0],       -3,          3, 0 },
     { "align_gyro_y",              VAR_INT8,   &cfg.align[ALIGN_GYRO][1],       -3,          3, 0 },
     { "align_gyro_z",              VAR_INT8,   &cfg.align[ALIGN_GYRO][2],       -3,          3, 0 },
@@ -171,41 +182,43 @@ const clivalue_t valueTable[] = {
     { "align_mag_y",               VAR_INT8,   &cfg.align[ALIGN_MAG][1],        -3,          3, 0 },
     { "align_mag_z",               VAR_INT8,   &cfg.align[ALIGN_MAG][2],        -3,          3, 0 },
     { "acc_hardware",              VAR_UINT8,  &cfg.acc_hardware,                0,          3, 0 },
-    { "acc_lpf_factor",            VAR_UINT8,  &cfg.acc_lpf_factor,              0,        250, 1 },
-		{ "acc_ins_lpf",               VAR_UINT8,  &cfg.acc_ins_lpf,                 1,        250, 1 },
+    { "acc_lpf_factor",            VAR_UINT8,  &cfg.acc_lpf_factor,              1,        250, 1 },
+    { "acc_ins_lpf",               VAR_UINT8,  &cfg.acc_ins_lpf,                 1,        250, 1 },
     { "acc_trim_pitch",            VAR_INT16,  &cfg.angleTrim[PITCH],         -300,        300, 1 },
     { "acc_trim_roll",             VAR_INT16,  &cfg.angleTrim[ROLL],          -300,        300, 1 },
     { "gyro_lpf",                  VAR_UINT16, &cfg.gyro_lpf,                    0,        256, 0 },
     { "gyro_cmpf_factor",          VAR_UINT16, &cfg.gyro_cmpf_factor,          100,       1000, 1 },
     { "accz_vel_cf",               VAR_FLOAT,  &cfg.accz_vel_cf,                 0,          1, 1 },
     { "accz_alt_cf",               VAR_FLOAT,  &cfg.accz_alt_cf,                 0,          1, 1 },
-	  { "baro_lag",                  VAR_FLOAT,  &cfg.baro_lag,                    0,         10, 1 },
-	  { "barodownscale",             VAR_FLOAT,  &cfg.barodownscale,               0,          1, 1 },		
+    { "baro_lag",                  VAR_FLOAT,  &cfg.baro_lag,                    0,         10, 1 },
+    { "baro_sonar_cf",             VAR_FLOAT,  &cfg.baro_sonar_cf,               0,          1, 1 },
+    { "barodownscale",             VAR_FLOAT,  &cfg.barodownscale,               0,          1, 1 },
     { "nazedebug",                 VAR_UINT8,  &cfg.nazedebug,                   0,          5, 0 },
     { "moron_threshold",           VAR_UINT8,  &cfg.moron_threshold,             0,        128, 0 },
     { "mag_declination",           VAR_INT16,  &cfg.mag_declination,        -18000,      18000, 1 },
+    { "mag_oldcalib",              VAR_UINT8,  &cfg.mag_oldcalib,                0,          1, 0 },
     { "gps_baudrate",              VAR_UINT32, &cfg.gps_baudrate,             1200,     115200, 0 },
     { "gps_type",                  VAR_UINT8,  &cfg.gps_type,                    0,          9, 0 },
-		{ "gps_ins_vel",               VAR_FLOAT,  &cfg.gps_ins_vel,                 0,          1, 1 },
-	  { "gps_lag",                   VAR_FLOAT,  &cfg.gps_lag,                     0,         10, 1 },
+    { "gps_ins_vel",               VAR_FLOAT,  &cfg.gps_ins_vel,                 0,          1, 1 },
+    { "gps_lag",                   VAR_FLOAT,  &cfg.gps_lag,                     0,         20, 1 },
+    { "gps_speedfilter",           VAR_FLOAT,  &cfg.gps_speedfilter,             0,          1, 1 },
     { "gps_phase",                 VAR_FLOAT,  &cfg.gps_phase,                 -30,         30, 1 },
-		{ "gps_ph_minsat",             VAR_UINT8,  &cfg.gps_ph_minsat,               5,         10, 1 },
-		{ "gps_ph_apm",                VAR_UINT8,  &cfg.gps_ph_apm,                  0,          1, 1 },
-    { "gps_ph_settletime",         VAR_UINT16, &cfg.gps_ph_settletime,          10,      10000, 1 },
-    { "gps_ph_settlespeed",        VAR_UINT8,  &cfg.gps_ph_settlespeed,          1,        200, 1 },
-		{ "gps_ph_targetsqrt",         VAR_UINT16, &cfg.gps_ph_targetsqrt,           1,      60000, 1 },
+    { "gps_ph_minsat",             VAR_UINT8,  &cfg.gps_ph_minsat,               5,         10, 1 },
+    { "gps_ph_apm",                VAR_UINT8,  &cfg.gps_ph_apm,                  0,          1, 1 },
+    { "gps_ph_settlespeed",        VAR_UINT16, &cfg.gps_ph_settlespeed,          0,       1000, 1 },
+    { "gps_ph_targetsqrt",         VAR_UINT16, &cfg.gps_ph_targetsqrt,           1,      60000, 1 },
     { "gps_phmove_speed",          VAR_FLOAT,  &cfg.gps_phmove_speed,            0,        100, 1 },
-		{ "gps_maxangle",              VAR_UINT8,  &cfg.gps_maxangle,               10,         45, 1 },
+    { "gps_maxangle",              VAR_UINT8,  &cfg.gps_maxangle,               10,         45, 1 },
     { "gps_minanglepercent",       VAR_UINT8,  &cfg.gps_minanglepercent,         1,        100, 1 },
     { "gps_wp_radius",             VAR_UINT16, &cfg.gps_wp_radius,               0,       2000, 1 },
     { "gps_rtl_minhight",          VAR_UINT16, &cfg.gps_rtl_minhight,            0,        200, 1 },
     { "gps_rtl_mindist",           VAR_UINT8,  &cfg.gps_rtl_mindist,             0,         50, 1 },
-    { "gps_rtl_flyaway",           VAR_UINT8,  &cfg.gps_rtl_flyaway,             0,        100, 1 },		
-		{ "gps_yaw",                   VAR_UINT8,  &cfg.gps_yaw,                    20,        150, 1 },
+    { "gps_rtl_flyaway",           VAR_UINT8,  &cfg.gps_rtl_flyaway,             0,        100, 1 },
+    { "gps_yaw",                   VAR_UINT8,  &cfg.gps_yaw,                    20,        150, 1 },
     { "nav_rtl_lastturn",          VAR_UINT8,  &cfg.nav_rtl_lastturn,            0,          1, 1 },
     { "nav_speed_min",             VAR_INT16,  &cfg.nav_speed_min,              10,       2000, 1 },
     { "nav_speed_max",             VAR_INT16,  &cfg.nav_speed_max,              50,       2000, 1 },
-    { "nav_slew_rate",             VAR_UINT8,  &cfg.nav_slew_rate,               0,        100, 1 },
+    { "nav_slew_rate",             VAR_UINT8,  &cfg.nav_slew_rate,              10,        200, 1 },
     { "nav_controls_heading",      VAR_UINT8,  &cfg.nav_controls_heading,        0,          1, 1 },
     { "nav_tail_first",            VAR_UINT8,  &cfg.nav_tail_first,              0,          1, 1 },
     { "gps_pos_p",                 VAR_UINT8,  &cfg.P8[PIDPOS],                  0,        200, 1 },
@@ -219,7 +232,7 @@ const clivalue_t valueTable[] = {
     { "gps_nav_d",                 VAR_UINT8,  &cfg.D8[PIDNAVR],                 0,        200, 1 },
     { "led_invert",                VAR_UINT8,  &cfg.led_invert,                  0,          1, 0 },
     { "looptime",                  VAR_UINT16, &cfg.looptime,                    0,       9000, 1 },
-    { "oldcontroller",             VAR_UINT8,  &cfg.oldcontroller,               0,          1, 1 },		
+    { "oldcontroller",             VAR_UINT8,  &cfg.oldcontroller,               0,          1, 1 },
     { "p_pitch",                   VAR_UINT8,  &cfg.P8[PITCH],                   0,        200, 1 },
     { "i_pitch",                   VAR_UINT8,  &cfg.I8[PITCH],                   0,        200, 1 },
     { "d_pitch",                   VAR_UINT8,  &cfg.D8[PITCH],                   0,        200, 1 },
@@ -236,15 +249,20 @@ const clivalue_t valueTable[] = {
     { "i_level",                   VAR_UINT8,  &cfg.I8[PIDLEVEL],                0,        200, 1 },
     { "d_level",                   VAR_UINT8,  &cfg.D8[PIDLEVEL],                0,        200, 1 },
     { "auxChannels",               VAR_UINT8,  &cfg.auxChannels,                 4,         14, 0 },
-		{ "SONAR_Pinout",              VAR_UINT8,  &cfg.SONAR_Pinout,                0,          1, 0 },
-		{ "LED_Type",                  VAR_UINT8,  &cfg.LED_Type,                    0,          3, 0 },
-		{ "LED_pinout",                VAR_UINT8,  &cfg.LED_Pinout,                  0,          1, 0 },
-		{ "LED_ControlChannel",        VAR_UINT8,  &cfg.LED_ControlChannel,          1,         12, 0 }, // Aux Channel to controll the LED Pattern
-		{ "LED_ARMED",                 VAR_UINT8,  &cfg.LED_Armed,                   0,          1, 1 }, // 0 = Show LED only if armed, 1 = always show LED
-		{ "LED_Toggle_Delay",          VAR_UINT16, &cfg.LED_Toggle_Delay,            0,      65535, 0 },
-		{ "LED_Pattern1",              VAR_UINT32, &cfg.LED_Pattern1,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 1
-		{ "LED_Pattern2",              VAR_UINT32, &cfg.LED_Pattern2,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 2
-		{ "LED_Pattern3",              VAR_UINT32, &cfg.LED_Pattern3,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 3};
+    { "SONAR_Pinout",              VAR_UINT8,  &cfg.SONAR_Pinout,                0,          2, 0 },
+    { "sonar_min",                 VAR_UINT8,  &cfg.sonar_min,                   0,        200, 1 },
+    { "sonar_max",                 VAR_UINT16, &cfg.sonar_max,                  50,        700, 1 },
+    { "sonar_debug",               VAR_UINT8,  &cfg.sonar_debug,                 0,          1, 1 },
+    { "sonar_tilt",                VAR_UINT8,  &cfg.sonar_tilt,                 10,         50, 1 },    
+    { "tele_protocol",             VAR_UINT8,  &cfg.tele_protocol,               0,          1, 0 },
+    { "LED_Type",                  VAR_UINT8,  &cfg.LED_Type,                    0,          3, 0 },
+    { "LED_pinout",                VAR_UINT8,  &cfg.LED_Pinout,                  0,          1, 0 },
+    { "LED_ControlChannel",        VAR_UINT8,  &cfg.LED_ControlChannel,          1,         12, 0 }, // Aux Channel to controll the LED Pattern
+    { "LED_ARMED",                 VAR_UINT8,  &cfg.LED_Armed,                   0,          1, 1 }, // 0 = Show LED only if armed, 1 = always show LED
+    { "LED_Toggle_Delay",          VAR_UINT16, &cfg.LED_Toggle_Delay,            0,      65535, 0 },
+    { "LED_Pattern1",              VAR_UINT32, &cfg.LED_Pattern1,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 1
+    { "LED_Pattern2",              VAR_UINT32, &cfg.LED_Pattern2,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 2
+    { "LED_Pattern3",              VAR_UINT32, &cfg.LED_Pattern3,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 3};
 };
 
 #define VALUE_COUNT (sizeof(valueTable) / sizeof(valueTable[0]))
@@ -271,7 +289,7 @@ static void cliPrintVar(const clivalue_t *var, uint32_t full);
 
 static char *i2a(unsigned i, char *a, unsigned r)
 {
-    if (i / r > 0) 
+    if (i / r > 0)
         a = i2a(i / r, a, r);
     *a = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i % r];
     return a + 1;
@@ -281,13 +299,15 @@ char *itoa(int i, char *a, int r)
 {
     if ((r < 2) || (r > 36))
         r = 10;
-    if (i < 0) {
+    if (i < 0)
+    {
         *a = '-';
         *i2a(-(unsigned)i, a + 1, r) = 0;
-    } else 
+    }
+    else
         *i2a(i, a, r) = 0;
     return a;
-} 
+}
 
 #endif
 
@@ -312,33 +332,40 @@ static float _atof(const char *p)
     double sign, value, scale;
 
     // Skip leading white space, if any.
-    while (white_space(*p) ) {
+    while (white_space(*p) )
+    {
         p += 1;
     }
 
     // Get sign, if any.
     sign = 1.0;
-    if (*p == '-') {
+    if (*p == '-')
+    {
         sign = -1.0;
         p += 1;
 
-    } else if (*p == '+') {
+    }
+    else if (*p == '+')
+    {
         p += 1;
     }
 
     // Get digits before decimal point or exponent, if any.
     value = 0.0;
-    while (valid_digit(*p)) {
+    while (valid_digit(*p))
+    {
         value = value * 10.0 + (*p - '0');
         p += 1;
     }
 
     // Get digits after decimal point, if any.
-    if (*p == '.') {
+    if (*p == '.')
+    {
         double pow10 = 10.0;
         p += 1;
 
-        while (valid_digit(*p)) {
+        while (valid_digit(*p))
+        {
             value += (*p - '0') / pow10;
             pow10 *= 10.0;
             p += 1;
@@ -347,32 +374,49 @@ static float _atof(const char *p)
 
     // Handle exponent, if any.
     scale = 1.0;
-    if ((*p == 'e') || (*p == 'E')) {
+    if ((*p == 'e') || (*p == 'E'))
+    {
         unsigned int expon;
         p += 1;
 
         // Get sign of exponent, if any.
         frac = 0;
-        if (*p == '-') {
+        if (*p == '-')
+        {
             frac = 1;
             p += 1;
 
-        } else if (*p == '+') {
+        }
+        else if (*p == '+')
+        {
             p += 1;
         }
 
         // Get digits of exponent, if any.
         expon = 0;
-        while (valid_digit(*p)) {
+        while (valid_digit(*p))
+        {
             expon = expon * 10 + (*p - '0');
             p += 1;
         }
         if (expon > 308) expon = 308;
 
         // Calculate scaling factor.
-        while (expon >= 50) { scale *= 1E50; expon -= 50; }
-        while (expon >=  8) { scale *= 1E8;  expon -=  8; }
-        while (expon >   0) { scale *= 10.0; expon -=  1; }
+        while (expon >= 50)
+        {
+            scale *= 1E50;
+            expon -= 50;
+        }
+        while (expon >=  8)
+        {
+            scale *= 1E8;
+            expon -=  8;
+        }
+        while (expon >   0)
+        {
+            scale *= 10.0;
+            expon -=  1;
+        }
     }
 
     // Return signed and scaled floating point result.
@@ -404,19 +448,26 @@ static char *ftoa(float x, char *floatString)
     else
         intString2[0] = '-';    // Negative number, add a negative sign
 
-    if (strlen(intString1) == 1) {
+    if (strlen(intString1) == 1)
+    {
         intString2[1] = '0';
         intString2[2] = '0';
         intString2[3] = '0';
         strcat(intString2, intString1);
-    } else if (strlen(intString1) == 2) {
+    }
+    else if (strlen(intString1) == 2)
+    {
         intString2[1] = '0';
         intString2[2] = '0';
         strcat(intString2, intString1);
-    } else if (strlen(intString1) == 3) {
+    }
+    else if (strlen(intString1) == 3)
+    {
         intString2[1] = '0';
         strcat(intString2, intString1);
-    } else {
+    }
+    else
+    {
         strcat(intString2, intString1);
     }
 
@@ -448,18 +499,24 @@ static void cliAux(char *cmdline)
     char *ptr;
 
     len = strlen(cmdline);
-    if (len == 0) {
+    if (len == 0)
+    {
         // print out aux channel settings
         for (i = 0; i < CHECKBOXITEMS; i++)
             printf("aux %u %u\r\n", i, cfg.activate[i]);
-    } else {
+    }
+    else
+    {
         ptr = cmdline;
         i = atoi(ptr);
-        if (i < CHECKBOXITEMS) {
+        if (i < CHECKBOXITEMS)
+        {
             ptr = strchr(cmdline, ' ');
             val = atoi(ptr);
             cfg.activate[i] = val;
-        } else {
+        }
+        else
+        {
             printf("Invalid Feature index: must be < %u\r\n", CHECKBOXITEMS);
         }
     }
@@ -476,7 +533,8 @@ static void cliCMix(char *cmdline)
 
     len = strlen(cmdline);
 
-    if (len == 0) {
+    if (len == 0)
+    {
         uartPrint("Custom mixer: \r\nMotor\tThr\tRoll\tPitch\tYaw\r\n");
         for (i = 0; i < MAX_MOTORS; i++)
         {
@@ -502,16 +560,22 @@ static void cliCMix(char *cmdline)
             uartPrint(fabs(mixsum[i]) > 0.01f ? "NG\t" : "OK\t");
         uartPrint("\r\n");
         return;
-    } else if (strncasecmp(cmdline, "load", 4) == 0) {
+    }
+    else if (strncasecmp(cmdline, "load", 4) == 0)
+    {
         ptr = strchr(cmdline, ' ');
-        if (ptr) {
+        if (ptr)
+        {
             len = strlen(++ptr);
-            for (i = 0; ; i++) {
-                if (mixerNames[i] == NULL) {
+            for (i = 0; ; i++)
+            {
+                if (mixerNames[i] == NULL)
+                {
                     uartPrint("Invalid mixer type...\r\n");
                     break;
                 }
-                if (strncasecmp(ptr, mixerNames[i], len) == 0) {
+                if (strncasecmp(ptr, mixerNames[i], len) == 0)
+                {
                     mixerLoadMix(i);
                     printf("Loaded %s mix...\r\n", mixerNames[i]);
                     cliCMix("");
@@ -519,36 +583,48 @@ static void cliCMix(char *cmdline)
                 }
             }
         }
-    } else {
+    }
+    else
+    {
         ptr = cmdline;
         i = atoi(ptr); // get motor number
-        if (--i < MAX_MOTORS) {
+        if (--i < MAX_MOTORS)
+        {
             ptr = strchr(ptr, ' ');
-            if (ptr) {
-                cfg.customMixer[i].throttle = _atof(++ptr); 
+            if (ptr)
+            {
+                cfg.customMixer[i].throttle = _atof(++ptr);
                 check++;
             }
             ptr = strchr(ptr, ' ');
-            if (ptr) {
+            if (ptr)
+            {
                 cfg.customMixer[i].roll = _atof(++ptr);
                 check++;
             }
             ptr = strchr(ptr, ' ');
-            if (ptr) {
+            if (ptr)
+            {
                 cfg.customMixer[i].pitch = _atof(++ptr);
                 check++;
             }
             ptr = strchr(ptr, ' ');
-            if (ptr) {
+            if (ptr)
+            {
                 cfg.customMixer[i].yaw = _atof(++ptr);
                 check++;
             }
-            if (check != 4) {
+            if (check != 4)
+            {
                 uartPrint("Wrong number of arguments, needs idx thr roll pitch yaw\r\n");
-            } else {
+            }
+            else
+            {
                 cliCMix("");
             }
-        } else {
+        }
+        else
+        {
             printf("Motor number must be between 1 and %d\r\n", MAX_MOTORS);
         }
     }
@@ -572,7 +648,7 @@ static void cliDump(char *cmdline)
     const clivalue_t *setval;
 
     printf(";Current Config: Copy everything below here...\r\n");
-	  printf(";Firmware: %s\r\n", FIRMWARE);
+    printf(";Firmware: %s\r\n", FIRMWARE);
 
     // print out aux switches
     cliAux("");
@@ -581,8 +657,10 @@ static void cliDump(char *cmdline)
     printf("mixer %s\r\n", mixerNames[cfg.mixerConfiguration - 1]);
 
     // print custom mix if exists
-    if (cfg.customMixer[0].throttle != 0.0f) {
-        for (i = 0; i < MAX_MOTORS; i++) {
+    if (cfg.customMixer[0].throttle != 0.0f)
+    {
+        for (i = 0; i < MAX_MOTORS; i++)
+        {
             if (cfg.customMixer[i].throttle == 0.0f) break;
             thr = cfg.customMixer[i].throttle;
             roll = cfg.customMixer[i].roll;
@@ -597,22 +675,25 @@ static void cliDump(char *cmdline)
             printf("%s", ftoa(pitch, buf));
             if (yaw < 0) printf(" ");
             printf("%s\r\n", ftoa(yaw, buf));
-        }   
+        }
         printf("cmix %d 0 0 0 0\r\n", i + 1);
     }
     mask = featureMask();                                // print enabled features
-    for (i = 0; ; i++) {                                 // disable all feature first
+    for (i = 0; ; i++)                                   // disable all feature first
+    {
         if (featureNames[i] == NULL) break;
         printf("feature -%s\r\n", featureNames[i]);
     }
-    for (i = 0; ; i++) {                                 // reenable what we want.
+    for (i = 0; ; i++)                                   // reenable what we want.
+    {
         if (featureNames[i] == NULL) break;
         if (mask & (1 << i)) printf("feature %s\r\n", featureNames[i]);
     }
     for (i = 0; i < 8; i++) buf[cfg.rcmap[i]] = rcChannelLetters[i]; // print RC MAPPING
     buf[i] = '\0';
     printf("map %s\r\n", buf);
-    for (i = 0; i < VALUE_COUNT; i++) {                  // print settings
+    for (i = 0; i < VALUE_COUNT; i++)                    // print settings
+    {
         setval = &valueTable[i];
         printf("set %s = ", valueTable[i].name);
         cliPrintVar(setval, 0);
@@ -626,7 +707,7 @@ static void cliExit(char *cmdline)
     memset(cliBuffer, 0, sizeof(cliBuffer));
     bufferIndex = 0;
     cliMode = 0;
-	  uartPrint("\r\nRebooting...");
+    uartPrint("\r\nRebooting...");
     delay(10);
     systemReset(false);                                 // Just Reset without saving makes more sense
 //    cliSave(cmdline);                                   // save and reboot... I think this makes the most sense
@@ -641,39 +722,53 @@ static void cliFeature(char *cmdline)
     len = strlen(cmdline);
     mask = featureMask();
 
-    if (len == 0) {
+    if (len == 0)
+    {
         uartPrint("Enabled features: ");
-        for (i = 0; ; i++) {
+        for (i = 0; ; i++)
+        {
             if (featureNames[i] == NULL) break;
             if (mask & (1 << i)) printf("%s ", featureNames[i]);
         }
         uartPrint("\r\n");
-    } else if (strncasecmp(cmdline, "list", len) == 0) {
-			  uartPrint("Available features: \r\n");  // uartPrint("Available features: ");
-        for (i = 0; ; i++) {
+    }
+    else if (strncasecmp(cmdline, "list", len) == 0)
+    {
+        uartPrint("Available features: \r\n");  // uartPrint("Available features: ");
+        for (i = 0; ; i++)
+        {
             if (featureNames[i] == NULL) break;
-						printf("%s \r\n", featureNames[i]); // printf("%s ", featureNames[i]);
+            printf("%s \r\n", featureNames[i]); // printf("%s ", featureNames[i]);
         }
         uartPrint("\r\n");
         return;
-    } else {
+    }
+    else
+    {
         bool remove = false;
-        if (cmdline[0] == '-') {
+        if (cmdline[0] == '-')
+        {
             remove = true;            // remove feature
             cmdline++;                // skip over -
             len--;
         }
 
-        for (i = 0; ; i++) {
-            if (featureNames[i] == NULL) {
+        for (i = 0; ; i++)
+        {
+            if (featureNames[i] == NULL)
+            {
                 uartPrint("Invalid feature name...\r\n");
                 break;
             }
-            if (strncasecmp(cmdline, featureNames[i], len) == 0) {
-                if (remove) {
+            if (strncasecmp(cmdline, featureNames[i], len) == 0)
+            {
+                if (remove)
+                {
                     featureClear(1 << i);
                     uartPrint("Disabled ");
-                } else {
+                }
+                else
+                {
                     featureSet(1 << i);
                     uartPrint("Enabled ");
                 }
@@ -687,7 +782,7 @@ static void cliFeature(char *cmdline)
 static void cliHelp(char *cmdline)
 {
     uint32_t i = 0;
-    uartPrint("Available commands:\r\n");    
+    uartPrint("Available commands:\r\n");
     for (i = 0; i < CMD_COUNT; i++) printf("%s\t%s\r\n", cmdTable[i].name, cmdTable[i].param);
 }
 
@@ -697,10 +792,12 @@ static void cliMap(char *cmdline)
     uint32_t i;
     char out[9];
     len = strlen(cmdline);
-    if (len == 8) {
+    if (len == 8)
+    {
         // uppercase it
         for (i = 0; i < 8; i++) cmdline[i] = toupper(cmdline[i]);
-        for (i = 0; i < 8; i++) {
+        for (i = 0; i < 8; i++)
+        {
             if (strchr(rcChannelLetters, cmdline[i]) && !strchr(cmdline + i + 1, cmdline[i]))
                 continue;
             uartPrint("Must be any order of AETR1234\r\n");
@@ -718,15 +815,19 @@ static void cliMixer(char *cmdline)
 {
     uint8_t i;
     uint8_t len;
-    
+
     len = strlen(cmdline);
 
-    if (len == 0) {
+    if (len == 0)
+    {
         printf("Current mixer: %s\r\n", mixerNames[cfg.mixerConfiguration - 1]);
         return;
-    } else if (strncasecmp(cmdline, "list", len) == 0) {
+    }
+    else if (strncasecmp(cmdline, "list", len) == 0)
+    {
         uartPrint("Available mixers: ");
-        for (i = 0; ; i++) {
+        for (i = 0; ; i++)
+        {
             if (mixerNames[i] == NULL) break;
             printf("%s ", mixerNames[i]);
         }
@@ -734,12 +835,15 @@ static void cliMixer(char *cmdline)
         return;
     }
 
-    for (i = 0; ; i++) {
-        if (mixerNames[i] == NULL) {
+    for (i = 0; ; i++)
+    {
+        if (mixerNames[i] == NULL)
+        {
             uartPrint("Invalid mixer type...\r\n");
             break;
         }
-        if (strncasecmp(cmdline, mixerNames[i], len) == 0) {
+        if (strncasecmp(cmdline, mixerNames[i], len) == 0)
+        {
             cfg.mixerConfiguration = i + 1;
             printf("Mixer set to %s\r\n", mixerNames[i]);
             break;
@@ -747,13 +851,13 @@ static void cliMixer(char *cmdline)
     }
 }
 
-static void cliSave(char *cmdline)
+void cliSave(char *cmdline)
 {
     uartPrint("Saving...");
     writeParams(0);
     uartPrint("\r\nRebooting...");
     delay(10);
-	  cliMode = 0;
+    cliMode = 0;
     systemReset(false);
 }
 
@@ -762,34 +866,36 @@ static void cliPrintVar(const clivalue_t *var, uint32_t full)
     int32_t value = 0;
     char buf[8];
 
-    switch (var->type) {
-        case VAR_UINT8:
-            value = *(uint8_t *)var->ptr;
-            break;
+    switch (var->type)
+    {
+    case VAR_UINT8:
+        value = *(uint8_t *)var->ptr;
+        break;
 
-        case VAR_INT8:
-            value = *(int8_t *)var->ptr;
-            break;
+    case VAR_INT8:
+        value = *(int8_t *)var->ptr;
+        break;
 
-        case VAR_UINT16:
-            value = *(uint16_t *)var->ptr;
-            break;
+    case VAR_UINT16:
+        value = *(uint16_t *)var->ptr;
+        break;
 
-        case VAR_INT16:
-            value = *(int16_t *)var->ptr;
-            break;
+    case VAR_INT16:
+        value = *(int16_t *)var->ptr;
+        break;
 
-        case VAR_UINT32:
-            value = *(uint32_t *)var->ptr;
-            break;
+    case VAR_UINT32:
+        value = *(uint32_t *)var->ptr;
+        break;
 
-        case VAR_FLOAT:
-            printf("%s", ftoa(*(float *)var->ptr, buf));
-            if (full) {
-                printf(" %s", ftoa((float)var->min, buf));
-                printf(" %s", ftoa((float)var->max, buf));
-            }
-            return; // return from case for float only
+    case VAR_FLOAT:
+        printf("%s", ftoa(*(float *)var->ptr, buf));
+        if (full)
+        {
+            printf(" %s", ftoa((float)var->min, buf));
+            printf(" %s", ftoa((float)var->max, buf));
+        }
+        return; // return from case for float only
     }
     printf("%d", value);
     if (full)
@@ -798,24 +904,25 @@ static void cliPrintVar(const clivalue_t *var, uint32_t full)
 
 static void cliSetVar(const clivalue_t *var, const int32_t value)
 {
-    switch (var->type) {
-        case VAR_UINT8:
-        case VAR_INT8:
-            *(char *)var->ptr = (char)value;
-            break;
+    switch (var->type)
+    {
+    case VAR_UINT8:
+    case VAR_INT8:
+        *(char *)var->ptr = (char)value;
+        break;
 
-        case VAR_UINT16:
-        case VAR_INT16:
-            *(short *)var->ptr = (short)value;
-            break;
+    case VAR_UINT16:
+    case VAR_INT16:
+        *(short *)var->ptr = (short)value;
+        break;
 
-        case VAR_UINT32:
-            *(int *)var->ptr = (int)value;
-            break;
+    case VAR_UINT32:
+        *(int *)var->ptr = (int)value;
+        break;
 
-        case VAR_FLOAT:
-            *(float *)var->ptr = *(float *)&value;
-            break;
+    case VAR_FLOAT:
+        *(float *)var->ptr = *(float *)&value;
+        break;
     }
 }
 
@@ -830,28 +937,37 @@ static void cliSet(char *cmdline)
 
     len = strlen(cmdline);
 
-    if (len == 0 || (len == 1 && cmdline[0] == '*')) {
+    if (len == 0 || (len == 1 && cmdline[0] == '*'))
+    {
         uartPrint("Current settings: \r\n");
-        for (i = 0; i < VALUE_COUNT; i++) {
+        for (i = 0; i < VALUE_COUNT; i++)
+        {
             val = &valueTable[i];
             printf("%s = ", valueTable[i].name);
             cliPrintVar(val, len); // when len is 1 (when * is passed as argument), it will print min/max values as well, for gui
             uartPrint("\r\n");
         }
-    } else if ((eqptr = strstr(cmdline, "="))) {
+    }
+    else if ((eqptr = strstr(cmdline, "=")))
+    {
         // has equal, set var
         eqptr++;
         len--;
         value = atoi(eqptr);
         valuef = _atof(eqptr);
-        for (i = 0; i < VALUE_COUNT; i++) {
+        for (i = 0; i < VALUE_COUNT; i++)
+        {
             val = &valueTable[i];
-            if (strncasecmp(cmdline, valueTable[i].name, strlen(valueTable[i].name)) == 0) {
-                if (valuef >= valueTable[i].min && valuef <= valueTable[i].max) { // here we compare the float value since... it should work, RIGHT?
+            if (strncasecmp(cmdline, valueTable[i].name, strlen(valueTable[i].name)) == 0)
+            {
+                if (valuef >= valueTable[i].min && valuef <= valueTable[i].max)   // here we compare the float value since... it should work, RIGHT?
+                {
                     cliSetVar(val, valueTable[i].type == VAR_FLOAT ? *(uint32_t *)&valuef : value); // this is a silly dirty hack. please fix me later.
                     printf("%s set to ", valueTable[i].name);
                     cliPrintVar(val, 0);
-                } else {
+                }
+                else
+                {
                     uartPrint("ERR: Value assignment out of range\r\n");
                 }
                 return;
@@ -867,11 +983,12 @@ static void cliStatus(char *cmdline)
     uint32_t mask;
 
     printf("System Uptime: %d seconds, Voltage: %d * 0.1V (%dS battery)\r\n",
-        millis() / 1000, vbat, batteryCellCount);
+           millis() / 1000, vbat, batteryCellCount);
     mask = sensorsMask();
 
     printf("CPU %dMHz, detected sensors: ", (SystemCoreClock / 1000000));
-    for (i = 0; ; i++) {
+    for (i = 0; ; i++)
+    {
         if (sensorNames[i] == NULL)
             break;
         if (mask & (1 << i))
@@ -886,248 +1003,269 @@ static void cliStatus(char *cmdline)
 
 static void cliVersion(char *cmdline)
 {
-	uartPrint(FIRMWARE);
+    uartPrint(FIRMWARE);
 }
 
 void serialOSD(void)
 {
 #define LCDdelay 12
     static uint32_t rctimer;
-	  static uint8_t exit,input,lastinput,brake,brakeval,speeduptimer;
-	  static uint16_t DatasetNr;
+    static uint8_t exit,input,lastinput,brake,brakeval,speeduptimer;
+    static uint16_t DatasetNr;
     const clivalue_t *setval;
     uint32_t timetmp;
 
-	  if (cliMode != 0) return;                                           // Don't do this if we are in cli mode
+    if (cliMode != 0) return;                                           // Don't do this if we are in cli mode
     LCDinit();
     printf("Harakiri 10");
-	  LCDline2();
-	  printf("LCD Interface");
-	  delay(2000);
-	  LCDclear();
+    LCDline2();
+    printf("LCD Interface");
+    delay(2000);
+    LCDclear();
     exit      = 0;
-		DatasetNr = 0;
-	  brake     = 0;
-	  brakeval  = 0;
-	  speeduptimer = 0;
-		LCDline1();
-	  printf("%s", valueTable[DatasetNr].name);                           // Display first item anyway (even if lcd ==0)
-		LCDline2();
+    DatasetNr = 0;
+    brake     = 0;
+    brakeval  = 0;
+    speeduptimer = 0;
+    LCDline1();
+    printf("%s", valueTable[DatasetNr].name);                           // Display first item anyway (even if lcd ==0)
+    LCDline2();
     setval = &valueTable[DatasetNr];
     cliPrintVar(setval, 0);
-	  while (exit == 0){
-  	    timetmp = micros();
- 	      if (spektrumFrameComplete()) computeRC();                       // Generates no rcData yet, but rcDataSAVE
-        if ((int32_t)(timetmp - rctimer) >= 0) {                        // Start of 50Hz Loop
+    while (exit == 0)
+    {
+        timetmp = micros();
+        if (spektrumFrameComplete()) computeRC();                       // Generates no rcData yet, but rcDataSAVE
+        if ((int32_t)(timetmp - rctimer) >= 0)                          // Start of 50Hz Loop
+        {
             rctimer = timetmp + 20000;
-	          LED1_TOGGLE;
-	          LED0_TOGGLE;
- 		 	      if (!feature(FEATURE_SPEKTRUM)) computeRC();
-						GetActualRCdataOutRCDataSave();                             // Now we have new rcData to deal and MESS with
-	          if (rcData[THROTTLE] < cfg.mincheck && rcData[YAW] > cfg.maxcheck && rcData[PITCH] > cfg.maxcheck) exit = 1; // Quit don't save
-					  if (rcData[THROTTLE] < cfg.mincheck && rcData[YAW] < cfg.mincheck && rcData[PITCH] > cfg.maxcheck) exit = 2; // Quit and save
-	          input = 0;
+            LED1_TOGGLE;
+            LED0_TOGGLE;
+            if (!feature(FEATURE_SPEKTRUM)) computeRC();
+            GetActualRCdataOutRCDataSave();                             // Now we have new rcData to deal and MESS with
+            if (rcData[THROTTLE] < cfg.mincheck && rcData[YAW] > cfg.maxcheck && rcData[PITCH] > cfg.maxcheck) exit = 1; // Quit don't save
+            if (rcData[THROTTLE] < cfg.mincheck && rcData[YAW] < cfg.mincheck && rcData[PITCH] > cfg.maxcheck) exit = 2; // Quit and save
+            input = 0;
             if (exit == 0 && input == 0 && rcData[PITCH] < cfg.mincheck) input = 1;
             if (exit == 0 && input == 0 && rcData[PITCH] > cfg.maxcheck) input = 2;
-						if (exit == 0 && input == 0 && rcData[ROLL]  < cfg.mincheck) input = 3;
-						if (exit == 0 && input == 0 && rcData[ROLL]  > cfg.maxcheck) input = 4;
+            if (exit == 0 && input == 0 && rcData[ROLL]  < cfg.mincheck) input = 3;
+            if (exit == 0 && input == 0 && rcData[ROLL]  > cfg.maxcheck) input = 4;
 
-					  if (lastinput == input){                                    // Adjust Inputspeed
-							  speeduptimer++;
-							  if (speeduptimer >= 100){
-									speeduptimer = 99;
-									brakeval = 8;
-								}else brakeval = 17;
-						}else{
-							  brakeval = 0;
+            if (lastinput == input)                                     // Adjust Inputspeed
+            {
+                speeduptimer++;
+                if (speeduptimer >= 100)
+                {
+                    speeduptimer = 99;
+                    brakeval = 8;
+                }
+                else brakeval = 17;
+            }
+            else
+            {
+                brakeval = 0;
                 speeduptimer = 0;
-						}
-						lastinput = input;
-				    brake++;
-					  if (brake >= brakeval) brake = 0;
-					      else input = 0;
-					
-		 			  switch (input){
-                case 0:
+            }
+            lastinput = input;
+            brake++;
+            if (brake >= brakeval) brake = 0;
+            else input = 0;
+
+            switch (input)
+            {
+            case 0:
                 break;
-                case 1:                                                 // Down
-								    do{                                                 // Search for next Dataset
-                        DatasetNr++;
-								        if (DatasetNr == VALUE_COUNT) DatasetNr = 0;
-										}while (valueTable[DatasetNr].lcd == 0);
-								    LCDclear();
-									  printf("%s", valueTable[DatasetNr].name);
-                		LCDline2();
-                    setval = &valueTable[DatasetNr];
-                    cliPrintVar(setval, 0);
+            case 1:                                                 // Down
+                do                                                  // Search for next Dataset
+                {
+                    DatasetNr++;
+                    if (DatasetNr == VALUE_COUNT) DatasetNr = 0;
+                }
+                while (valueTable[DatasetNr].lcd == 0);
+                LCDclear();
+                printf("%s", valueTable[DatasetNr].name);
+                LCDline2();
+                setval = &valueTable[DatasetNr];
+                cliPrintVar(setval, 0);
                 break;
-                case 2:                                                 // UP
-								    do{                                                 // Search for next Dataset
-								        if (DatasetNr == 0) DatasetNr = VALUE_COUNT;
-                        DatasetNr--;
-										}while (valueTable[DatasetNr].lcd == 0);
-								    LCDclear();
-									  printf("%s", valueTable[DatasetNr].name);
-								    LCDline2();
-                    setval = &valueTable[DatasetNr];
-                    cliPrintVar(setval, 0);
+            case 2:                                                 // UP
+                do                                                  // Search for next Dataset
+                {
+                    if (DatasetNr == 0) DatasetNr = VALUE_COUNT;
+                    DatasetNr--;
+                }
+                while (valueTable[DatasetNr].lcd == 0);
+                LCDclear();
+                printf("%s", valueTable[DatasetNr].name);
+                LCDline2();
+                setval = &valueTable[DatasetNr];
+                cliPrintVar(setval, 0);
                 break;
-                case 3:                                                 // LEFT
-                    if (brakeval != 8) changeval(setval,-1);            // Substract within the limit
-                    else changeval(setval,-5);
-     								LCDline2();
-                    cliPrintVar(setval, 0);
+            case 3:                                                 // LEFT
+                if (brakeval != 8) changeval(setval,-1);            // Substract within the limit
+                else changeval(setval,-5);
+                LCDline2();
+                cliPrintVar(setval, 0);
                 break;
-                case 4:                                                 // RIGHT
-                    if (brakeval != 8) changeval(setval,1);             // Add within the limit
-                    else changeval(setval,5);									
-								    LCDline2();
-                    cliPrintVar(setval, 0);
+            case 4:                                                 // RIGHT
+                if (brakeval != 8) changeval(setval,1);             // Add within the limit
+                else changeval(setval,5);
+                LCDline2();
+                cliPrintVar(setval, 0);
                 break;
-						}
+            }
         }                                                               // End of 50Hz Loop
-	  }
-	  delay(500);
-	  LCDclear();
+    }
+    delay(500);
+    LCDclear();
     printf(" Exit & Reboot ");
-		LCDline2();
-    switch (exit){
-		    case 1:
-            printf(" NOT Saving");
-            delay(1000);
-				    LCDoff();
-				    systemReset(false);
-				break;
-		    case 2:
-            printf(".!.!.Saving.!.!.");
-            delay(1000);
-				    writeParams(0);
-				    LCDoff();
-				    systemReset(false);
-				break;
-		}
+    LCDline2();
+    switch (exit)
+    {
+    case 1:
+        printf(" NOT Saving");
+        delay(1000);
+        LCDoff();
+        systemReset(false);
+        break;
+    case 2:
+        printf(".!.!.Saving.!.!.");
+        delay(1000);
+        writeParams(0);
+        LCDoff();
+        systemReset(false);
+        break;
+    }
 }
 
 static void changeval(const clivalue_t *var, const int8_t adder)
 {
     int32_t value;
-	  float   valuef;
+    float   valuef;
     int32_t maximum;
     int32_t minimum;
 
     maximum = var->max;
     minimum = var->min;
-    switch (var->type) {
-        case VAR_UINT8:
-        case VAR_INT8:
-            value = *(char *)var->ptr;
-            value = constrain(value + adder,minimum,maximum);
-            *(char *)var->ptr = (char)value;
-            break;
+    switch (var->type)
+    {
+    case VAR_UINT8:
+    case VAR_INT8:
+        value = *(char *)var->ptr;
+        value = constrain(value + adder,minimum,maximum);
+        *(char *)var->ptr = (char)value;
+        break;
 
-        case VAR_UINT16:
-        case VAR_INT16:
-            value = *(short *)var->ptr;
-            value = constrain(value + adder,minimum,maximum);				
-	    			*(short *)var->ptr = (short)value;
-            break;
+    case VAR_UINT16:
+    case VAR_INT16:
+        value = *(short *)var->ptr;
+        value = constrain(value + adder,minimum,maximum);
+        *(short *)var->ptr = (short)value;
+        break;
 
-        case VAR_UINT32:
-            value = *(int *)var->ptr;
-            value = constrain(value + adder,minimum,maximum);				
-            *(int *)var->ptr = (int)value;
-            break;
+    case VAR_UINT32:
+        value = *(int *)var->ptr;
+        value = constrain(value + adder,minimum,maximum);
+        *(int *)var->ptr = (int)value;
+        break;
 
-        case VAR_FLOAT:
-            *(float *)&valuef = *(float *)var->ptr;
-            valuef = constrain(valuef + (float)adder/1000.0f,minimum,maximum);				
-            *(float *)var->ptr = *(float *)&valuef;
-            break;
+    case VAR_FLOAT:
+        *(float *)&valuef = *(float *)var->ptr;
+        valuef = constrain(valuef + (float)adder/1000.0f,minimum,maximum);
+        *(float *)var->ptr = *(float *)&valuef;
+        break;
     }
 }
 
 void LCDinit(void)
 {
-	  serialInit(9600);                                                   // INIT LCD HERE
-		LCDoff();
-	  uartWrite(0xFE);
+    serialInit(9600);                                                   // INIT LCD HERE
+    LCDoff();
+    uartWrite(0xFE);
     delay(LCDdelay);
-	  uartWrite(0x0C);                                                    // Display ON
-	  delay(LCDdelay);
+    uartWrite(0x0C);                                                    // Display ON
+    delay(LCDdelay);
     uartWrite(0x7C);
-	  delay(LCDdelay);
-	  uartWrite(0x9D);                                                    // 100% Brightness
-  	LCDclear();
+    delay(LCDdelay);
+    uartWrite(0x9D);                                                    // 100% Brightness
+    LCDclear();
 }
 
 void LCDoff(void)
 {
-	  delay(LCDdelay);
+    delay(LCDdelay);
     uartWrite(0xFE);
-	  delay(LCDdelay);
-	  uartWrite(0x08);                                                    // LCD Display OFF
-	  delay(LCDdelay);	
+    delay(LCDdelay);
+    uartWrite(0x08);                                                    // LCD Display OFF
+    delay(LCDdelay);
 }
 
 void LCDclear(void)                                                     // clear screen, cursor line 1, pos 0
 {
     delay(LCDdelay);
     uartWrite(0xFE);
-	  delay(LCDdelay);
-	  uartWrite(0x01);                                                    // Clear
+    delay(LCDdelay);
+    uartWrite(0x01);                                                    // Clear
     LCDline1();
 }
 
 void LCDline1(void)                                                     // Sets LCD Cursor to line 1 pos 0
 {
-	  delay(LCDdelay);
-	  uartWrite(0xFE);
-  	delay(LCDdelay);
-	  uartWrite(0x80);                                                    // Line #1 pos 0 
-    delay(LCDdelay);	
+    delay(LCDdelay);
+    uartWrite(0xFE);
+    delay(LCDdelay);
+    uartWrite(0x80);                                                    // Line #1 pos 0
+    delay(LCDdelay);
 }
 
 void LCDline2(void)                                                     // Sets LCD Cursor to line 2 pos 0
 {
     delay(LCDdelay);
     uartWrite(0xFE);
-  	delay(LCDdelay);
-	  uartWrite(0xC0);  	                                                // Line #2
-	  delay(LCDdelay);
+    delay(LCDdelay);
+    uartWrite(0xC0);  	                                                // Line #2
+    delay(LCDdelay);
     printf("               ");                                          // Clear Line #2
-	  delay(LCDdelay);
-	  uartWrite(0xFE);
-  	delay(LCDdelay);
-	  uartWrite(0xC0);  	                                                // Line #2
-	  delay(LCDdelay);
+    delay(LCDdelay);
+    uartWrite(0xFE);
+    delay(LCDdelay);
+    uartWrite(0xC0);  	                                                // Line #2
+    delay(LCDdelay);
 }
 
 void cliProcess(void)
 {
-    if (!cliMode) {
+    if (!cliMode)
+    {
         cliMode = 1;
         uartPrint("\r\nEntering CLI Mode, type 'exit' or 'save' to return, or 'help' \r\n");
         cliPrompt();
     }
 
-    while (uartAvailable()) {
+    while (uartAvailable())
+    {
         uint8_t c = uartRead();
-        if (c == '\t' || c == '?') {
+        if (c == '\t' || c == '?')
+        {
             // do tab completion
             const clicmd_t *cmd, *pstart = NULL, *pend = NULL;
             int i = bufferIndex;
-            for (cmd = cmdTable; cmd < cmdTable + CMD_COUNT; cmd++) {
+            for (cmd = cmdTable; cmd < cmdTable + CMD_COUNT; cmd++)
+            {
                 if (bufferIndex && (strncasecmp(cliBuffer, cmd->name, bufferIndex) != 0))
                     continue;
                 if (!pstart)
                     pstart = cmd;
                 pend = cmd;
             }
-            if (pstart) {    /* Buffer matches one or more commands */
-                for (; ; bufferIndex++) {
+            if (pstart)      /* Buffer matches one or more commands */
+            {
+                for (; ; bufferIndex++)
+                {
                     if (pstart->name[bufferIndex] != pend->name[bufferIndex])
                         break;
-                    if (!pstart->name[bufferIndex]) {
+                    if (!pstart->name[bufferIndex])
+                    {
                         /* Unambiguous -- append a space */
                         cliBuffer[bufferIndex++] = ' ';
                         break;
@@ -1135,10 +1273,12 @@ void cliProcess(void)
                     cliBuffer[bufferIndex] = pstart->name[bufferIndex];
                 }
             }
-            if (!bufferIndex || pstart != pend) {
+            if (!bufferIndex || pstart != pend)
+            {
                 /* Print list of ambiguous matches */
                 uartPrint("\r\033[K");
-                for (cmd = pstart; cmd <= pend; cmd++) {
+                for (cmd = pstart; cmd <= pend; cmd++)
+                {
                     uartPrint(cmd->name);
                     uartWrite('\t');
                 }
@@ -1147,23 +1287,29 @@ void cliProcess(void)
             }
             for (; i < bufferIndex; i++)
                 uartWrite(cliBuffer[i]);
-        } else if (!bufferIndex && c == 4) {
+        }
+        else if (!bufferIndex && c == 4)
+        {
             cliExit(cliBuffer);
             return;
-        } else if (c == 12) {
+        }
+        else if (c == 12)
+        {
             // clear screen
             uartPrint("\033[2J\033[1;1H");
             cliPrompt();
-        } else if (bufferIndex && (c == '\n' || c == '\r')) {
+        }
+        else if (bufferIndex && (c == '\n' || c == '\r'))
+        {
             // enter pressed
             clicmd_t *cmd = NULL;
             clicmd_t target;
             uartPrint("\r\n");
             cliBuffer[bufferIndex] = 0; // null terminate
-            
+
             target.name = cliBuffer;
             target.param = NULL;
-            
+
             cmd = bsearch(&target, cmdTable, CMD_COUNT, sizeof cmdTable[0], cliCompare);
             if (cmd)
                 cmd->func(cliBuffer + strlen(cmd->name) + 1);
@@ -1177,17 +1323,135 @@ void cliProcess(void)
             if (!cliMode)
                 return;
             cliPrompt();
-        } else if (c == 127) {
+        }
+        else if (c == 127)
+        {
             // backspace
-            if (bufferIndex) {
+            if (bufferIndex)
+            {
                 cliBuffer[--bufferIndex] = 0;
                 uartPrint("\010 \010");
             }
-        } else if (bufferIndex < sizeof(cliBuffer) && c >= 32 && c <= 126) {
+        }
+        else if (bufferIndex < sizeof(cliBuffer) && c >= 32 && c <= 126)
+        {
             if (!bufferIndex && c == 32)
                 continue;
             cliBuffer[bufferIndex++] = c;
             uartWrite(c);
         }
     }
+}
+
+// ************************************************************************************************************
+// TestScan on the I2C bus
+// ************************************************************************************************************
+#define MMA8452_ADDRESS       0x1C
+#define HMC5883L_ADDRESS      0x1E  // 0xA
+#define DaddyW_SONAR          0x20  // Daddy Walross Sonar
+#define OLED_address          0x3C  // OLED at address 0x3C in 7bit
+#define ADXL345_ADDRESS       0x53
+#define BMA180_adress         0x64  // don't respond ??
+#define MPU6050_ADDRESS       0x68  // 0x75     or 0x68  0x15
+#define L3G4200D_ADDRESS      0x68  // 0x0f
+#define BMP085_I2C_ADDR       0x77  // 0xD0
+#define MS5611_ADDR           0x77  // 0xA0
+
+/*
+new May 15 2013 Johannes && Some stuff from me as well :)
+*/
+static void cliScanI2Cbus(char *cmdline)
+{
+    bool    ack;
+    bool    msbaro   = false;
+    bool    L3G4200D = false;
+    uint8_t address;
+    uint8_t nDevices;
+    uint8_t sig = 0;
+  	uint8_t bufdaddy[2];                                // Dummy for DaddyW testread
+    char    buf[20];
+
+    printf("Scanning I2C-Bus for devices ...\r\n");
+
+    nDevices = 0;
+    for(address = 1; address < 127; address++ )
+    {
+        ack = i2cRead(address, address, 1, &sig);       // Do a blind read. Perhaps it's sufficient? Otherwise the hard way...
+      
+        if (!ack && address == MMA8452_ADDRESS)         // Do it the hard way, if no ACK on mma Adress
+        {
+            sig = 0;
+            i2cRead(MMA8452_ADDRESS, 0x0D, 1, &sig);
+            if (sig == 0x2A || sig == 0x1A)
+                ack = true;
+            else
+                ack = false;
+        }
+
+        if (!ack && address == DaddyW_SONAR)            // Do it the hard way, if no ACK on DaddyW Adress
+        {
+            ack = i2cRead(DaddyW_SONAR, 0x32, 2, bufdaddy);
+        }
+        
+        if (!ack && address == MS5611_ADDR)             // MS Baro needs special treatment BMP would have said "ack" already
+        {
+            ack = i2cRead(MS5611_ADDR, 0xA0, 1, &sig);  // Sig is irrelevant?
+            msbaro = ack;
+        }
+
+        if (!ack && address == MPU6050_ADDRESS)         // Special case mpu and L3G4200D have same Adr.
+        {
+            sig = 0;
+            i2cRead(0x68, 0x0F, 1, &sig);
+            if (sig == 0xD3)
+            {
+                ack = true;              
+                L3G4200D = true;
+            }
+        }
+
+        if (ack)
+        {
+            printf("I2C device found at 0x");
+            if (address<16) printf("0");
+            printf("%x",address);
+            switch (address)
+            {
+            case MMA8452_ADDRESS:                       // Detection altered
+                strcpy(buf,"MMA8452");
+                break;
+            case HMC5883L_ADDRESS:
+                strcpy(buf,"HMC5883L");
+                break;
+            case DaddyW_SONAR:                          // Daddy Walross Sonar added
+                strcpy(buf,"DaddyW Sonar");							
+                break;						
+            case OLED_address:
+                strcpy(buf,"OLED");                     // i2c_OLED_init();
+                break;
+            case ADXL345_ADDRESS:                       // ADXL added
+                strcpy(buf,"ADXL345");
+                break;						
+            case BMA180_adress:                         // Sensor currently not supported by a driver
+                strcpy(buf,"BMA180");
+                break;
+            case MPU6050_ADDRESS:
+                if (L3G4200D) strcpy(buf,"L3G4200D");
+                else strcpy(buf,"MPU3050/MPU6050");
+                break;
+            case BMP085_I2C_ADDR:
+                if(msbaro) strcpy(buf,"MS5611");
+                else strcpy(buf,"BMP085");
+                break;
+            default:                                    // Unknown case added
+                strcpy(buf,"UNKNOWN TO ME");
+                break;
+            }
+            printf(" Probably it's %s \r\n",buf);
+            nDevices++;
+        }
+        delay(50);
+    }
+    if (nDevices == 0) printf("No I2C devices found\r\n");
+    else printf("Done, %d Devices found\r\n",nDevices);
 }
