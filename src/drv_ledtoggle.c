@@ -5,23 +5,26 @@ static uint8_t ledIndex;                                    // Is the led GPIO c
 static uint16_t ledtoggle_pin;
 static uint8_t ledDelay;                                    // make circle slower
 
-static void ledEnable() {
-	digitalHi( GPIOA, ledtoggle_pin );
+static void ledEnable()
+{
+    digitalHi( GPIOA, ledtoggle_pin );
 }
 
-static void ledDisable() {
-	digitalLo( GPIOA, ledtoggle_pin );
+static void ledDisable()
+{
+    digitalLo( GPIOA, ledtoggle_pin );
 }
 
-void ledToggleInit(  ) {
+void ledToggleInit(  )
+{
     switch(cfg.LED_Pinout)
     {
     case 0:
-    	ledtoggle_pin = GPIO_Pin_6;                           // RC5 (PB8) - 3.3v
-       break;
+        ledtoggle_pin = GPIO_Pin_6;                           // RC5 (PB8) - 3.3v
+        break;
     case 1:
-    	ledtoggle_pin = GPIO_Pin_7;                           // RC6 (PB8) - 3.3v
-       break;
+        ledtoggle_pin = GPIO_Pin_7;                           // RC6 (PB8) - 3.3v
+        break;
     }
     GPIO_InitTypeDef GPIO_InitStructure;                    // Set the led pin to be an output
     GPIO_InitStructure.GPIO_Pin = ledtoggle_pin;
@@ -31,20 +34,25 @@ void ledToggleInit(  ) {
     ledDisable();
 }
 
-void ledToggleUpdate( bool activated ) {                    // Ignore when we're not using leds
-	if ( !activated ) {
-		ledDisable();
-		return;
-	}
-	ledDelay++;
-	if (ledDelay == cfg.LED_Toggle_Delay) {
-		ledDelay=0;
-		uint8_t bit = (ledIndex++ >> 1) & 31;
-		if ( LED_Value & ( 1 << bit ) ) {
-			ledEnable();  // LED0_ON;
-		}
-		else {
-			ledDisable(); // LED0_OFF;
-		}
-	}
+void ledToggleUpdate( bool activated )                      // Ignore when we're not using leds
+{
+    if ( !activated )
+    {
+        ledDisable();
+        return;
+    }
+    ledDelay++;
+    if (ledDelay == LED_Value_Delay)
+    {
+        ledDelay=0;
+        uint8_t bit = (ledIndex++ >> 1) & 31;
+        if ( LED_Value & ( 1 << bit ) )
+        {
+            ledEnable();  // LED0_ON;
+        }
+        else
+        {
+            ledDisable(); // LED0_OFF;
+        }
+    }
 }

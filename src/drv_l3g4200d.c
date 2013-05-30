@@ -48,7 +48,8 @@ bool l3g4200dDetect(sensor_t *gyro)
 
 void l3g4200dConfig(uint16_t lpf)
 {
-    switch (lpf) {
+    switch (lpf)
+    {
     case 32:
         mpuLowPassFilter = L3G4200D_DLPF_32HZ;
         break;

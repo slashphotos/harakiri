@@ -49,7 +49,7 @@
     PWM5..8 used for motors
     PWM9..10 used for servo or else motors
     PWM11..14 used for motors
-    
+
     2) multirotor PPM input with more servos
     PWM1 used for PPM
     PWM5..8 used for motors
@@ -75,7 +75,8 @@
 
 typedef void pwmCallbackPtr(uint8_t port, uint16_t capture);
 
-static pwmHardware_t timerHardware[] = {
+static pwmHardware_t timerHardware[] =
+{
     { TIM2, GPIOA, GPIO_Pin_0, TIM_Channel_1, TIM2_IRQn, 0, },          // PWM1
     { TIM2, GPIOA, GPIO_Pin_1, TIM_Channel_2, TIM2_IRQn, 0, },          // PWM2
     { TIM2, GPIOA, GPIO_Pin_2, TIM_Channel_3, TIM2_IRQn, 0, },          // PWM3
@@ -92,24 +93,26 @@ static pwmHardware_t timerHardware[] = {
     { TIM4, GPIOB, GPIO_Pin_9, TIM_Channel_4, TIM4_IRQn, 0, },          // PWM14
 };
 
-typedef struct {
+typedef struct
+{
     pwmCallbackPtr *callback;
     volatile uint16_t *ccr;
     uint16_t period;
 
     // for input only
-    uint8_t channel;
-    uint8_t state;
+    uint8_t  channel;
+    uint8_t  state;
     uint16_t rise;
     uint16_t fall;
     uint16_t capture;
 } pwmPortData_t;
 
-enum {
+enum
+{
     TYPE_IP = 0x10,
     TYPE_IW = 0x20,
-    TYPE_M = 0x40,
-    TYPE_S = 0x80
+    TYPE_M  = 0x40,
+    TYPE_S  = 0x80
 };
 
 static pwmPortData_t pwmPorts[MAX_PORTS];
@@ -118,36 +121,38 @@ static pwmPortData_t *motors[MAX_MOTORS];
 static pwmPortData_t *servos[MAX_SERVOS];
 static uint8_t numMotors = 0;
 static uint8_t numServos = 0;
-static uint8_t  numInputs = 0;
-// external vars (ugh)
-extern uint16_t failsafeCnt;
+static uint8_t numInputs = 0;
 
-static const uint8_t multiPPM[] = {
-    PWM1 | TYPE_IP,     // PPM input
-    PWM9 | TYPE_M,      // Swap to servo if needed
-    PWM10 | TYPE_M,     // Swap to servo if needed
+extern uint16_t failsafeCnt; // external vars (ugh)
+
+static const uint8_t multiPPM[] =
+{
+    PWM1  | TYPE_IP,    // PPM input
+    PWM9  | TYPE_M,     // Swap to servo if needed (Gimbal)                   // PWM56 ports for SONAR
+    PWM10 | TYPE_M,     // Swap to servo if needed (Gimbal)                   // PWM56 ports for SONAR
     PWM11 | TYPE_M,
     PWM12 | TYPE_M,
     PWM13 | TYPE_M,
     PWM14 | TYPE_M,
-    PWM5 | TYPE_M,      // Swap to servo if needed
-    PWM6 | TYPE_M,      // Swap to servo if needed
-    PWM7 | TYPE_M,      // Swap to servo if needed
-    PWM8 | TYPE_M,      // Swap to servo if needed
+    PWM5 | TYPE_M,      // Swap to servo if needed                             // RC5 ports for MONO_LED
+    PWM6 | TYPE_M,      // Swap to servo if needed                             // RC6 ports for MONO_LED
+    PWM7 | TYPE_M,      // Swap to servo if needed                             // RC78 ports for SONAR
+    PWM8 | TYPE_M,      // Swap to servo if needed                             // RC78 ports for SONAR
     0xFF
 };
 
-static const uint8_t multiPWM[] = {
-    PWM1 | TYPE_IW,     // input #1
-    PWM2 | TYPE_IW,
-    PWM3 | TYPE_IW,
-    PWM4 | TYPE_IW,
-    PWM5 | TYPE_IW,
-    PWM6 | TYPE_IW,
-    PWM7 | TYPE_IW,
-    PWM8 | TYPE_IW,     // input #8
-    PWM9 | TYPE_M,      // motor #1 or servo #1 (swap to servo if needed)
-    PWM10 | TYPE_M,     // motor #2 or servo #2 (swap to servo if needed)
+static const uint8_t multiPWM[] =
+{
+    PWM1  | TYPE_IW,    // input #1
+    PWM2  | TYPE_IW,
+    PWM3 | TYPE_IW,                                                            // UART ports for GPS
+    PWM4 | TYPE_IW,                                                            // UART ports for GPS
+    PWM5 | TYPE_IW,                                                            // RC5 ports for MONO_LED
+    PWM6 | TYPE_IW,                                                            // RC6 ports for MONO_LED
+    PWM7 | TYPE_IW,                                                            // RC78 ports for SONAR
+    PWM8 | TYPE_IW,     // input #8                                            // RC78 ports for SONAR
+    PWM9 | TYPE_M,      // motor #1 or servo #1 (swap to servo if needed)      // PWM56 ports for SONAR
+    PWM10 | TYPE_M,     // motor #2 or servo #2 (swap to servo if needed)      // PWM56 ports for SONAR
     PWM11 | TYPE_M,     // motor #1 or #3
     PWM12 | TYPE_M,
     PWM13 | TYPE_M,
@@ -155,31 +160,33 @@ static const uint8_t multiPWM[] = {
     0xFF
 };
 
-static const uint8_t airPPM[] = {
-    PWM1 | TYPE_IP,     // PPM input
-    PWM9 | TYPE_M,      // motor #1
+static const uint8_t airPPM[] =
+{
+    PWM1  | TYPE_IP,    // PPM input
+    PWM9  | TYPE_M,     // motor #1
     PWM10 | TYPE_M,     // motor #2
     PWM11 | TYPE_S,     // servo #1
     PWM12 | TYPE_S,
     PWM13 | TYPE_S,
     PWM14 | TYPE_S,     // servo #4
-    PWM5 | TYPE_S,      // servo #5
-    PWM6 | TYPE_S,
-    PWM7 | TYPE_S,
-    PWM8 | TYPE_S,      // servo #8
+    PWM5  | TYPE_S,     // servo #5
+    PWM6  | TYPE_S,
+    PWM7  | TYPE_S,
+    PWM8  | TYPE_S,     // servo #8
     0xFF
 };
 
-static const uint8_t airPWM[] = {
-    PWM1 | TYPE_IW,     // input #1
-    PWM2 | TYPE_IW,
-    PWM3 | TYPE_IW,
-    PWM4 | TYPE_IW,
-    PWM5 | TYPE_IW,
-    PWM6 | TYPE_IW,
-    PWM7 | TYPE_IW,
-    PWM8 | TYPE_IW,     // input #8
-    PWM9 | TYPE_M,      // motor #1
+static const uint8_t airPWM[] =
+{
+    PWM1  | TYPE_IW,    // input #1
+    PWM2  | TYPE_IW,
+    PWM3  | TYPE_IW,
+    PWM4  | TYPE_IW,
+    PWM5  | TYPE_IW,
+    PWM6  | TYPE_IW,
+    PWM7  | TYPE_IW,
+    PWM8  | TYPE_IW,    // input #8
+    PWM9  | TYPE_M,     // motor #1
     PWM10 | TYPE_M,     // motor #2
     PWM11 | TYPE_S,     // servo #1
     PWM12 | TYPE_S,
@@ -188,7 +195,8 @@ static const uint8_t airPWM[] = {
     0xFF
 };
 
-static const uint8_t *hardwareMaps[] = {
+static const uint8_t *hardwareMaps[] =
+{
     multiPWM,
     multiPPM,
     airPWM,
@@ -230,23 +238,24 @@ static void pwmOCConfig(TIM_TypeDef *tim, uint8_t channel, uint16_t value)
     TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_Low;
     TIM_OCInitStructure.TIM_OCIdleState = TIM_OCIdleState_Set;
 
-    switch (channel) {
-        case TIM_Channel_1:
-            TIM_OC1Init(tim, &TIM_OCInitStructure);
-            TIM_OC1PreloadConfig(tim, TIM_OCPreload_Enable);
-            break;
-        case TIM_Channel_2:
-            TIM_OC2Init(tim, &TIM_OCInitStructure);
-            TIM_OC2PreloadConfig(tim, TIM_OCPreload_Enable);
-            break;
-        case TIM_Channel_3:
-            TIM_OC3Init(tim, &TIM_OCInitStructure);
-            TIM_OC3PreloadConfig(tim, TIM_OCPreload_Enable);
-            break;
-        case TIM_Channel_4:
-            TIM_OC4Init(tim, &TIM_OCInitStructure);
-            TIM_OC4PreloadConfig(tim, TIM_OCPreload_Enable);
-            break;
+    switch (channel)
+    {
+    case TIM_Channel_1:
+        TIM_OC1Init(tim, &TIM_OCInitStructure);
+        TIM_OC1PreloadConfig(tim, TIM_OCPreload_Enable);
+        break;
+    case TIM_Channel_2:
+        TIM_OC2Init(tim, &TIM_OCInitStructure);
+        TIM_OC2PreloadConfig(tim, TIM_OCPreload_Enable);
+        break;
+    case TIM_Channel_3:
+        TIM_OC3Init(tim, &TIM_OCInitStructure);
+        TIM_OC3PreloadConfig(tim, TIM_OCPreload_Enable);
+        break;
+    case TIM_Channel_4:
+        TIM_OC4Init(tim, &TIM_OCInitStructure);
+        TIM_OC4PreloadConfig(tim, TIM_OCPreload_Enable);
+        break;
     }
 }
 
@@ -289,19 +298,20 @@ static pwmPortData_t *pwmOutConfig(uint8_t port, uint16_t period, uint16_t value
         TIM_CtrlPWMOutputs(timerHardware[port].tim, ENABLE);
     TIM_Cmd(timerHardware[port].tim, ENABLE);
 
-    switch (timerHardware[port].channel) {
-        case TIM_Channel_1:
-            p->ccr = &timerHardware[port].tim->CCR1;
-            break;
-        case TIM_Channel_2:
-            p->ccr = &timerHardware[port].tim->CCR2;
-            break;
-        case TIM_Channel_3:
-            p->ccr = &timerHardware[port].tim->CCR3;
-            break;
-        case TIM_Channel_4:
-            p->ccr = &timerHardware[port].tim->CCR4;
-            break;
+    switch (timerHardware[port].channel)
+    {
+    case TIM_Channel_1:
+        p->ccr = &timerHardware[port].tim->CCR1;
+        break;
+    case TIM_Channel_2:
+        p->ccr = &timerHardware[port].tim->CCR2;
+        break;
+    case TIM_Channel_3:
+        p->ccr = &timerHardware[port].tim->CCR3;
+        break;
+    case TIM_Channel_4:
+        p->ccr = &timerHardware[port].tim->CCR4;
+        break;
     }
     return p;
 }
@@ -318,19 +328,20 @@ static pwmPortData_t *pwmInConfig(uint8_t port, pwmCallbackPtr callback, uint8_t
     p->callback = callback;
     p->channel = channel;
 
-    switch (timerHardware[port].channel) {
-        case TIM_Channel_1:
-            TIM_ITConfig(timerHardware[port].tim, TIM_IT_CC1, ENABLE);
-            break;
-        case TIM_Channel_2:
-            TIM_ITConfig(timerHardware[port].tim, TIM_IT_CC2, ENABLE);
-            break;
-        case TIM_Channel_3:
-            TIM_ITConfig(timerHardware[port].tim, TIM_IT_CC3, ENABLE);
-            break;
-        case TIM_Channel_4:
-            TIM_ITConfig(timerHardware[port].tim, TIM_IT_CC4, ENABLE);
-            break;
+    switch (timerHardware[port].channel)
+    {
+    case TIM_Channel_1:
+        TIM_ITConfig(timerHardware[port].tim, TIM_IT_CC1, ENABLE);
+        break;
+    case TIM_Channel_2:
+        TIM_ITConfig(timerHardware[port].tim, TIM_IT_CC2, ENABLE);
+        break;
+    case TIM_Channel_3:
+        TIM_ITConfig(timerHardware[port].tim, TIM_IT_CC3, ENABLE);
+        break;
+    case TIM_Channel_4:
+        TIM_ITConfig(timerHardware[port].tim, TIM_IT_CC4, ENABLE);
+        break;
     }
     return p;
 }
@@ -339,11 +350,14 @@ void TIM1_CC_IRQHandler(void)
 {
     uint8_t port;
 
-    if (TIM_GetITStatus(TIM1, TIM_IT_CC1) == SET) {
+    if (TIM_GetITStatus(TIM1, TIM_IT_CC1) == SET)
+    {
         port = PWM9;
         TIM_ClearITPendingBit(TIM1, TIM_IT_CC1);
         pwmPorts[port].callback(port, TIM_GetCapture1(TIM1));
-    } else if (TIM_GetITStatus(TIM1, TIM_IT_CC4) == SET) {
+    }
+    else if (TIM_GetITStatus(TIM1, TIM_IT_CC4) == SET)
+    {
         port = PWM10;
         TIM_ClearITPendingBit(TIM1, TIM_IT_CC4);
         pwmPorts[port].callback(port, TIM_GetCapture4(TIM1));
@@ -353,21 +367,28 @@ void TIM1_CC_IRQHandler(void)
 static void pwmTIMxHandler(TIM_TypeDef *tim, uint8_t portBase)
 {
     int8_t port;
-    
+
     // Generic CC handler for TIM2,3,4
-    if (TIM_GetITStatus(tim, TIM_IT_CC1) == SET) {
+    if (TIM_GetITStatus(tim, TIM_IT_CC1) == SET)
+    {
         port = portBase + 0;
         TIM_ClearITPendingBit(tim, TIM_IT_CC1);
         pwmPorts[port].callback(port, TIM_GetCapture1(tim));
-    } else if (TIM_GetITStatus(tim, TIM_IT_CC2) == SET) {
+    }
+    else if (TIM_GetITStatus(tim, TIM_IT_CC2) == SET)
+    {
         port = portBase + 1;
         TIM_ClearITPendingBit(tim, TIM_IT_CC2);
         pwmPorts[port].callback(port, TIM_GetCapture2(tim));
-    } else if (TIM_GetITStatus(tim, TIM_IT_CC3) == SET) {
+    }
+    else if (TIM_GetITStatus(tim, TIM_IT_CC3) == SET)
+    {
         port = portBase + 2;
         TIM_ClearITPendingBit(tim, TIM_IT_CC3);
         pwmPorts[port].callback(port, TIM_GetCapture3(tim));
-    } else if (TIM_GetITStatus(tim, TIM_IT_CC4) == SET) {
+    }
+    else if (TIM_GetITStatus(tim, TIM_IT_CC4) == SET)
+    {
         port = portBase + 3;
         TIM_ClearITPendingBit(tim, TIM_IT_CC4);
         pwmPorts[port].callback(port, TIM_GetCapture4(tim));
@@ -376,12 +397,12 @@ static void pwmTIMxHandler(TIM_TypeDef *tim, uint8_t portBase)
 
 void TIM2_IRQHandler(void)
 {
-    pwmTIMxHandler(TIM2, PWM1); // PWM1..4
+    pwmTIMxHandler(TIM2, PWM1);  // PWM1..4
 }
 
 void TIM3_IRQHandler(void)
 {
-    pwmTIMxHandler(TIM3, PWM5); // PWM5..8
+    pwmTIMxHandler(TIM3, PWM5);  // PWM5..8
 }
 
 void TIM4_IRQHandler(void)
@@ -400,11 +421,15 @@ static void ppmCallback(uint8_t port, uint16_t capture)
     now = capture;
     diff = now - last;
 
-    if (diff > 2700) { // Per http://www.rcgroups.com/forums/showpost.php?p=21996147&postcount=3960 "So, if you use 2.5ms or higher as being the reset for the PPM stream start, you will be fine. I use 2.7ms just to be safe."
+    if (diff > 2700)   // Per http://www.rcgroups.com/forums/showpost.php?p=21996147&postcount=3960 "So, if you use 2.5ms or higher as being the reset for the PPM stream start, you will be fine. I use 2.7ms just to be safe."
+    {
         chan = 0;
-    } else {
+    }
+    else
+    {
 //        if (diff > 750 && diff < 2250 && chan < 8) {   // 750 to 2250 ms is our 'valid' channel range
-        if (diff > 750 && diff < 2250 && chan < MAX_INPUTS) {   // 750 to 2250 ms is our 'valid' channel range
+        if (diff > 750 && diff < 2250 && chan < MAX_INPUTS)     // 750 to 2250 ms is our 'valid' channel range
+        {
             captures[chan] = diff;
         }
         chan++;
@@ -414,11 +439,14 @@ static void ppmCallback(uint8_t port, uint16_t capture)
 
 static void pwmCallback(uint8_t port, uint16_t capture)
 {
-    if (pwmPorts[port].state == 0) {
+    if (pwmPorts[port].state == 0)
+    {
         pwmPorts[port].rise = capture;
         pwmPorts[port].state = 1;
         pwmICConfig(timerHardware[port].tim, timerHardware[port].channel, TIM_ICPolarity_Falling);
-    } else {
+    }
+    else
+    {
         pwmPorts[port].fall = capture;
         // compute capture
         pwmPorts[port].capture = pwmPorts[port].fall - pwmPorts[port].rise;
@@ -431,6 +459,7 @@ static void pwmCallback(uint8_t port, uint16_t capture)
     }
 }
 
+/* ORIGINAL FOR REFERENCE
 bool pwmInit(drv_pwm_config_t *init)
 {
     int i = 0;
@@ -452,40 +481,15 @@ bool pwmInit(drv_pwm_config_t *init)
             break;
 
         // skip UART ports for GPS
-        if (init->useUART && (port == PWM3 || port == PWM4)) {
-        	debug[1] = debug[1] | 0x0C;
+        if (init->useUART && (port == PWM3 || port == PWM4))
             continue;
-        }
+
         // skip ADC for powerMeter if configured
         if (init->adcChannel && (init->adcChannel == port))
             continue;
-				
-        //Start cGiesen mod
-        // skip RC5 ports for MONO_LED
-		if (init->useRC5 && port == PWM5 ) {
-        	debug[1] = debug[1] | 0x10;
-			continue;
-		}
-		// skip RC6 ports for MONO_LED
-		if (init->useRC6 && port == PWM6 ) {
-        	debug[1] = debug[1] | 0x20;
-			continue;
-		}
 
-		// skip RC78 ports for SONAR
-		if (init->useRC78 && (port == PWM7 || port == PWM8)) {
-        	debug[1] = debug[1] | 0xC0;
-			continue;
-		}
-		// skip PWM5 ports for SONAR
-		if (init->usePWM56 && (port == PWM9 || port == PWM10)) {
-        	debug[1] = debug[1] | 0x300;
-			continue;
-		}
-		//End cGiesen Mod
-				
-		    // hacks to allow current functionality
-        if ((mask & (TYPE_IP | TYPE_IW)) && !init->enableInput)
+        // hacks to allow current functionality
+        if (mask & (TYPE_IP | TYPE_IW) && !init->enableInput)
             mask = 0;
 
         if (init->useServos && !init->airplane) {
@@ -513,6 +517,83 @@ bool pwmInit(drv_pwm_config_t *init)
         }
     }
 
+    return false;
+}
+*/
+
+bool pwmInit(drv_pwm_config_t *init)
+{
+    int i = 0;
+    const uint8_t *setup;
+
+    // this is pretty hacky shit, but it will do for now. array of 4 config maps, [ multiPWM multiPPM airPWM airPPM ]
+    if (init->airplane) i = 2;                                 // switch to air hardware config
+    if (init->usePPM) i++;                                     // next index is for PPM
+
+    setup = hardwareMaps[i];
+
+    for (i = 0; i < MAX_PORTS; i++)
+    {
+        uint8_t port = setup[i] & 0x0F;
+        uint8_t mask = setup[i] & 0xF0;
+
+        if (setup[i] == 0xFF)                                  // terminator
+            break;
+
+        if (init->useUART && (port == PWM3 || port == PWM4))   // skip UART ports for GPS
+            continue;
+
+        if (init->adcChannel && (init->adcChannel == port))    // skip ADC for powerMeter if configured
+            continue;
+
+        //Start cGiesen mod && altered by me...
+        if (init->useRC5   && port == PWM5)                    // skip RC5 ports for MONO_LED
+            continue;
+
+        if (init->useRC6   && port == PWM6)                    // skip RC6 ports for MONO_LED
+            continue;
+
+        if (init->usePWM56 && (port == PWM13 || port == PWM14))// skip PWM5 ports for SONAR they are pwm13/14 in other nomenclature
+            continue;        
+
+        if (init->useRC78  && (port == PWM7 || port == PWM8))  // skip RC78 ports for SONAR
+            continue;
+        //End cGiesen Mod
+
+        if ((mask & (TYPE_IP | TYPE_IW)) && !init->enableInput)// hacks to allow current functionality
+            mask = 0;
+
+        if (init->useServos && !init->airplane)                // remap PWM9+10 as servos (but not in airplane mode LOL)
+        {
+            if (port == PWM9 || port == PWM10)
+                mask = TYPE_S;
+        }
+
+        if (init->extraServos && !init->airplane)              // remap PWM5..8 as servos when used in extended servo mode
+        {
+            if (port >= PWM5 && port <= PWM8)
+                mask = TYPE_S;
+        }
+
+        if (mask & TYPE_IP)
+        {
+            pwmInConfig(port, ppmCallback, 0);
+            numInputs = 8;
+        }
+        else if (mask & TYPE_IW)
+        {
+            pwmInConfig(port, pwmCallback, numInputs);
+            numInputs++;
+        }
+        else if (mask & TYPE_M)
+        {
+            motors[numMotors++] = pwmOutConfig(port, 1000000 / init->motorPwmRate, PULSE_1MS);
+        }
+        else if (mask & TYPE_S)
+        {
+            servos[numServos++] = pwmOutConfig(port, 1000000 / init->servoPwmRate, PULSE_1MS);
+        }
+    }
     return false;
 }
 
