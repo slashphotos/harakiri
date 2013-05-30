@@ -36,7 +36,8 @@
 #define U_ID_1 (*(uint32_t*)0x1FFFF7EC)
 #define U_ID_2 (*(uint32_t*)0x1FFFF7F0)
 
-typedef enum {
+typedef enum
+{
     SENSOR_ACC = 1 << 0,
     SENSOR_BARO = 1 << 1,
     SENSOR_MAG = 1 << 2,
@@ -45,14 +46,16 @@ typedef enum {
 } AvailableSensors;
 
 // Type of accelerometer used/detected
-typedef enum AccelSensors {
+typedef enum AccelSensors
+{
     ACC_DEFAULT = 0,
     ACC_ADXL345 = 1,
     ACC_MPU6050 = 2,
     ACC_MMA8452 = 3,
 } AccelSensors;
 
-typedef enum {
+typedef enum
+{
     FEATURE_PPM = 1 << 0,
     FEATURE_VBAT = 1 << 1,
     FEATURE_INFLIGHT_ACC_CAL = 1 << 2,
@@ -67,7 +70,7 @@ typedef enum {
     FEATURE_TELEMETRY = 1 << 11,
     FEATURE_PASS = 1 << 12,                                 // Crashpilot Passthrough
     FEATURE_POWERMETER = 1 << 13,
-	FEATURE_LCD = 1 << 14,                                  // Crashpilot LCD Display
+    FEATURE_LCD = 1 << 14,                                  // Crashpilot LCD Display
 } AvailableFeatures;
 
 //typedef enum {
@@ -110,7 +113,7 @@ typedef struct baro_t
 // Hardware definitions and GPIO
 
 #ifdef FY90Q
- // FY90Q
+// FY90Q
 #define LED0_GPIO   GPIOC
 #define LED0_PIN    GPIO_Pin_12
 #define LED1_GPIO   GPIOA
@@ -120,7 +123,7 @@ typedef struct baro_t
 #define ACC
 
 #else
- // Afroflight32
+// Afroflight32
 #define LED0_GPIO   GPIOB
 #define LED0_PIN    GPIO_Pin_3
 #define LED1_GPIO   GPIOB
@@ -160,7 +163,7 @@ typedef struct baro_t
 #undef SOFT_I2C                 // enable to test software i2c
 
 #ifdef FY90Q
- // FY90Q
+// FY90Q
 #include "drv_system.h"         // timers, delays, etc
 #include "drv_adc.h"
 #include "drv_i2c.h"
@@ -168,7 +171,7 @@ typedef struct baro_t
 #include "drv_uart.h"
 
 #else
- // AfroFlight32
+// AfroFlight32
 #include "drv_system.h"         // timers, delays, etc
 #include "drv_adc.h"
 #include "drv_adxl345.h"

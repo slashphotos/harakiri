@@ -29,10 +29,12 @@ void SysTick_Handler(void)
 uint32_t micros(void)
 {
     register uint32_t ms, cycle_cnt;
-    do {
+    do
+    {
         ms = sysTickUptime;
         cycle_cnt = SysTick->VAL;
-    } while (ms != sysTickUptime);
+    }
+    while (ms != sysTickUptime);
     return (ms * 1000) + (72000 - cycle_cnt) / 72;
 }
 
@@ -47,7 +49,8 @@ void systemInit(void)
     GPIO_InitTypeDef GPIO_InitStructure;
     uint32_t i;
 
-    gpio_config_t gpio_cfg[] = {
+    gpio_config_t gpio_cfg[] =
+    {
         { LED0_GPIO, LED0_PIN, GPIO_Mode_Out_PP }, // PB3 (LED)
         { LED1_GPIO, LED1_PIN, GPIO_Mode_Out_PP }, // PB4 (LED)
 #ifndef FY90Q
@@ -76,7 +79,8 @@ void systemInit(void)
     GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
 
     // Configure gpio
-    for (i = 0; i < gpio_count; i++) {
+    for (i = 0; i < gpio_count; i++)
+    {
         GPIO_InitStructure.GPIO_Pin = gpio_cfg[i].pin;
         GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
         GPIO_InitStructure.GPIO_Mode = gpio_cfg[i].mode;
@@ -115,7 +119,8 @@ void delayMicroseconds(uint32_t us)
     uint32_t elapsed = 0;
     uint32_t lastCount = SysTick->VAL;
 
-    for (;;) {
+    for (;;)
+    {
         register uint32_t current_count = SysTick->VAL;
         uint32_t elapsed_us;
 
@@ -147,7 +152,8 @@ void failureMode(uint8_t mode)
 {
     LED1_ON;
     LED0_OFF;
-    while (1) {
+    while (1)
+    {
         LED1_TOGGLE;
         LED0_TOGGLE;
         delay(475 * mode - 2);
@@ -161,11 +167,12 @@ void failureMode(uint8_t mode)
 
 void systemReset(bool toBootloader)
 {
-    if (toBootloader) {
+    if (toBootloader)
+    {
         // 1FFFF000 -> 20000200 -> SP
         // 1FFFF004 -> 1FFFF021 -> PC
         *((uint32_t *)0x20004FF0) = 0xDEADBEEF; // 20KB STM32F103
-    }        
+    }
 
     // Generate system reset
     SCB->AIRCR = AIRCR_VECTKEY_MASK | (uint32_t)0x04;
