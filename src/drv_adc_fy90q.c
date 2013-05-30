@@ -27,7 +27,8 @@ void adcSensorInit(sensor_t *acc, sensor_t *gyro)
 
 void adcCalibrateADC(ADC_TypeDef *ADCx, int n)
 {
-    while (n > 0) {
+    while (n > 0)
+    {
         delay(5);
         // Enable ADC reset calibration register
         ADC_ResetCalibration(ADCx);

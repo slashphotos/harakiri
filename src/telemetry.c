@@ -1,4 +1,4 @@
-/* 
+/*
  * FrSky Telemetry implementation by silpstream @ rcgroups
  */
 #include "board.h"
@@ -48,7 +48,7 @@
 // from sensors.c
 extern uint8_t batteryCellCount;
 
- 
+
 static void sendDataHead(uint8_t id)
 {
     uartWrite(PROTOCOL_HEADER);
@@ -63,13 +63,17 @@ static void sendTelemetryTail(void)
 static void serializeFrsky(uint8_t data)
 {
     // take care of byte stuffing
-    if (data == 0x5e) {
+    if (data == 0x5e)
+    {
         uartWrite(0x5d);
         uartWrite(0x3e);
-    } else if (data == 0x5d) {
+    }
+    else if (data == 0x5d)
+    {
         uartWrite(0x5d);
         uartWrite(0x3d);
-    } else
+    }
+    else
         uartWrite(data);
 }
 
@@ -86,7 +90,8 @@ static void sendAccel(void)
 {
     int i;
 
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 3; i++)
+    {
         sendDataHead(ID_ACC_X + i);
         serialize16(((float)accSmooth[i] / acc_1G) * 1000);
     }
@@ -205,7 +210,8 @@ static bool telemetryEnabled = false;
 
 void initTelemetry(bool State)
 {
-    if (State != telemetryEnabled) {
+    if (State != telemetryEnabled)
+    {
         if (State)
             serialInit(9600);
         else
@@ -219,7 +225,8 @@ static uint8_t cycleNum = 0;
 
 void sendTelemetry(void)
 {
-    if (millis() - lastCycleTime >= CYCLETIME) {
+    if (millis() - lastCycleTime >= CYCLETIME)
+    {
         lastCycleTime = millis();
         cycleNum++;
 
@@ -227,16 +234,19 @@ void sendTelemetry(void)
         sendAccel();
         sendTelemetryTail();
 
-        if ((cycleNum % 4) == 0) {      // Sent every 500ms
+        if ((cycleNum % 4) == 0)        // Sent every 500ms
+        {
             sendBaro();
             sendHeading();
             sendTelemetryTail();
         }
 
-        if ((cycleNum % 8) == 0) {      // Sent every 1s
+        if ((cycleNum % 8) == 0)        // Sent every 1s
+        {
             sendTemperature1();
 
-            if (feature(FEATURE_VBAT)) {
+            if (feature(FEATURE_VBAT))
+            {
                 sendVoltage();
                 sendVoltageAmp();
             }
@@ -247,7 +257,8 @@ void sendTelemetry(void)
             sendTelemetryTail();
         }
 
-        if (cycleNum == 40) {     //Frame 3: Sent every 5s
+        if (cycleNum == 40)       //Frame 3: Sent every 5s
+        {
             cycleNum = 0;
             sendTime();
             sendTelemetryTail();
