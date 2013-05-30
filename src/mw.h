@@ -290,7 +290,7 @@ typedef struct config_t
     uint32_t LED_Pattern3;            		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
 
     // Sonar Stuff
-    uint8_t  SONAR_Pinout;                  // choose sonar pinout 0=sonar_pwm56,1=sonar_rc78
+    uint8_t  SONAR_Pinout;                  // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4=MBRC78
     uint8_t  sonar_min;                     // Valid Sonar minimal range in cm (0-200)
     uint16_t sonar_max;                     // Valid Sonar maximal range in cm (0-700)
     uint8_t  sonar_debug;                   // 1 Sets Sonardata within sonar_min/max in debug[0]
@@ -434,7 +434,8 @@ void Sonar_init(void);
 void Sonar_update(void);
 
 // Output
-void mixerInit(void);
+uint8_t mixerInit(void);
+//void mixerInit(void);
 void mixerLoadMix(int index);
 void writeServos(void);
 void writeMotors(void);

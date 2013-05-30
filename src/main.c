@@ -17,26 +17,26 @@ static void _putc(void *p, char c)
 int main(void)
 {
     uint8_t i;
+    uint8_t NumberOfMotors;                // Store number of Motors used
     drv_pwm_config_t pwm_params;
     drv_adc_config_t adc_params;
-    static uint32_t LoopBreakTime;                        // Crashpilot
+    static uint32_t LoopBreakTime;         // Crashpilot
 
-    for (i = 0; i < MAX_RC_CHANNELS; i++)                 // Crashpilot init some silly stuff here
+    for (i = 0; i < MAX_RC_CHANNELS; i++)  // Crashpilot init some silly stuff here
     {
         rcData[i]     = 1502;
         rcDataSAVE[i] = 1502;
     }
 
 #if 0
-    // PC12, PA15
-    // using this to write asm for bootloader :)
+    // PC12, PA15 using this to write asm for bootloader :)
     RCC->APB2ENR |= RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO; // GPIOA/C+AFIO only
     AFIO->MAPR &= 0xF0FFFFFF;
     AFIO->MAPR = 0x02000000;
-    GPIOA->CRH = 0x34444444; // PIN 15 Output 50MHz
-    GPIOA->BRR = 0x8000; // set low 15
-    GPIOC->CRH = 0x44434444; // PIN 12 Output 50MHz
-    GPIOC->BRR = 0x1000; // set low 12
+    GPIOA->CRH = 0x34444444;               // PIN 15 Output 50MHz
+    GPIOA->BRR = 0x8000;                   // set low 15
+    GPIOC->CRH = 0x44434444;               // PIN 12 Output 50MHz
+    GPIOC->BRR = 0x1000;                   // set low 12
 #endif
 
 #if 0
@@ -44,8 +44,8 @@ int main(void)
     RCC->APB2ENR |= RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO; // GPIOB + AFIO
     AFIO->MAPR &= 0xF0FFFFFF;
     AFIO->MAPR = 0x02000000;
-    GPIOB->BRR = 0x18; // set low 4 & 3
-    GPIOB->CRL = 0x44433444; // PIN 4 & 3 Output 50MHz
+    GPIOB->BRR = 0x18;                     // set low 4 & 3
+    GPIOB->CRL = 0x44433444;               // PIN 4 & 3 Output 50MHz
 #endif
 
     systemInit();
@@ -67,16 +67,13 @@ int main(void)
 
     serialInit(cfg.serial_baudrate);
 
-    // We have these sensors
-#ifndef FY90Q
-    // AfroFlight32
-    sensorsSet(SENSOR_ACC | SENSOR_BARO | SENSOR_MAG);
+#ifndef FY90Q                              // We have these sensors
+    sensorsSet(SENSOR_ACC | SENSOR_BARO | SENSOR_MAG); // AfroFlight32
 #else
-    // FY90Q
-    sensorsSet(SENSOR_ACC);
+    sensorsSet(SENSOR_ACC);                // FY90Q
 #endif
 
-    mixerInit(); // this will set useServo var depending on mixer type
+    NumberOfMotors = mixerInit();          // this will set useServo var depending on mixer type
     // when using airplane/wing mixer, servo/motor outputs are remapped
     if (cfg.mixerConfiguration == MULTITYPE_AIRPLANE || cfg.mixerConfiguration == MULTITYPE_FLYING_WING)
         pwm_params.airplane = true;
@@ -95,29 +92,39 @@ int main(void)
     pwm_params.useRC78  = false;
     pwm_params.usePWM56 = false;
 
-//  I2C Sonar needs no further attention here    
-    
-    if (feature(FEATURE_PPM))
+#ifdef SONAR                                  // Do Sonars depending on Rc configuration. I2C Sonar needs no further attention here
+    if (feature(FEATURE_SONAR))
     {
-#ifdef SONAR
-        if (feature(FEATURE_SONAR))
+        switch(cfg.SONAR_Pinout)              // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
         {
-            switch (cfg.SONAR_Pinout)         // cfg.SONAR_Pinout  0=PWM56  1=RC78 2=I2C (DaddyW)
-            {
-            case 0:
-                pwm_params.usePWM56 = true;
-                break;
-            case 1:
-                pwm_params.useRC78  = true;
-                break;
-            }
+        case 0:
+            if (NumberOfMotors < 5) pwm_params.usePWM56 = true; // Only do this with 4 Motors or less
+            else pwm_params.usePWM56 = false; // Redundant
+            break;
+        case 1:
+            if (feature(FEATURE_PPM)) pwm_params.useRC78 = true; // ToDo: We should check for max motornumbers as well here
+            else pwm_params.useRC78 = false;  // Redundant just to keep it indep. from the "falseblock" above
+            break;
+        case 2:
+            pwm_params.useRC78  = false;      // Redundant
+            pwm_params.usePWM56 = false;      // Redundant
+            break;
+        case 3:
+            if (NumberOfMotors < 5) pwm_params.usePWM56 = true;
+            else pwm_params.usePWM56 = false; // Redundant
+            break;
+        case 4:
+            if (feature(FEATURE_PPM)) pwm_params.useRC78 = true;
+            else pwm_params.useRC78  = false; // Redundant
+            break;
         }
+    }
 #endif
-        if (feature(FEATURE_LED) && (cfg.LED_Type == 2))
-        {
-            if (cfg.LED_Pinout == 0) pwm_params.useRC5 = true;
-            if (cfg.LED_Pinout == 1) pwm_params.useRC6 = true;
-        }
+
+    if (feature(FEATURE_PPM) && feature(FEATURE_LED) && (cfg.LED_Type == 2))
+    {
+        if (cfg.LED_Pinout == 0) pwm_params.useRC5 = true;
+        if (cfg.LED_Pinout == 1) pwm_params.useRC6 = true;
     }
 
     switch (cfg.power_adc_channel)
@@ -135,8 +142,7 @@ int main(void)
 
     pwmInit(&pwm_params);
 
-    // configure PWM/CPPM read function. spektrum will override that
-    rcReadRawFunc = pwmReadRawRC;
+    rcReadRawFunc = pwmReadRawRC;          // configure PWM/CPPM read function. spektrum will override that
 
     if (feature(FEATURE_SPEKTRUM))
     {
@@ -145,30 +151,40 @@ int main(void)
     }
     else
     {
-        // spektrum and GPS are exclusive
-        // Optional GPS - available in both PPM and PWM input mode, in PWM input, reduces number of available channels by 2.
-        if (feature(FEATURE_GPS) && !feature(FEATURE_PASS))
+        if (feature(FEATURE_GPS) && !feature(FEATURE_PASS)) // spektrum and GPS are exclusive Optional GPS - available in both PPM and PWM input mode. In PWM input, reduces number of available channels by 2.
             gpsInit(cfg.gps_baudrate);
     }
 
     if (!feature(FEATURE_PASS))
     {
-#ifdef SONAR                         // I2C Sonar stuff always works. Why can't we use here PWM56 as well?
-        if (feature(FEATURE_SONAR) && cfg.SONAR_Pinout == 2)
-            Sonar_init();
-#endif
-        if (feature(FEATURE_PPM))
+#ifdef SONAR                               // Initialize Sonars here depending on Rc configuration.
+        if (feature(FEATURE_SONAR))
         {
-#ifdef SONAR                         // Other Sonars are only done with PPM
-            if (feature(FEATURE_SONAR))
+            switch(cfg.SONAR_Pinout)       // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
+            {
+            case 0:
+                if (NumberOfMotors < 5) Sonar_init();
+                break;
+            case 1:
+                if (feature(FEATURE_PPM)) Sonar_init();
+                break;
+            case 2:
                 Sonar_init();
-#endif
-            if (feature(FEATURE_LED) && (cfg.LED_Type == 2))
-                ledToggleInit();
+                break;
+            case 3:
+                if (NumberOfMotors < 5) Sonar_init();
+                break;
+            case 4:
+                if (feature(FEATURE_PPM)) Sonar_init();
+                break;
+            }
         }
+#endif
+        if (feature(FEATURE_PPM) && feature(FEATURE_LED) && (cfg.LED_Type == 2))
+            ledToggleInit();
 
-        LD1_ON();                    // Crashpilot LED1_ON;
-        LD0_OFF();                   // Crashpilot LED0_OFF;
+        LD1_ON();                          // Crashpilot LED1_ON;
+        LD0_OFF();                         // Crashpilot LED0_OFF;
         for (i = 0; i < 10; i++)
         {
             LED1_TOGGLE;
@@ -178,15 +194,13 @@ int main(void)
             delay(25);
             BEEP_OFF;
         }
-        LD0_OFF();                   // Crashpilot LED0_OFF;
-        LD1_OFF();                   // Crashpilot LED1_OFF;
+        LD0_OFF();                         // Crashpilot LED0_OFF;
+        LD1_OFF();                         // Crashpilot LED1_OFF;
 
-        // drop out any sensors that don't seem to work, init all the others. halt if gyro is dead.
-        sensorsAutodetect();
-        imuInit(); // Mag is initialized inside imuInit
+        sensorsAutodetect();               // drop out any sensors that don't seem to work, init all the others. halt if gyro is dead.
+        imuInit();                         // Mag is initialized inside imuInit
 
-        // Check battery type/voltage
-        if (feature(FEATURE_VBAT))
+        if (feature(FEATURE_VBAT))         // Check battery type/voltage
             batteryInit();
 
         previousTime = micros();
@@ -196,7 +210,7 @@ int main(void)
         f.SMALL_ANGLES_25 = 1;
 
     }
-    else
+    else                                   // We want feature pass, do the minimal program
     {
         sensorsAutodetect();
         imuInit();
@@ -218,6 +232,6 @@ int main(void)
 
 void HardFault_Handler(void)
 {
-    writeAllMotors(cfg.mincommand);	     // fall out of the sky
+    writeAllMotors(cfg.mincommand);	       // fall out of the sky
     while (1);
 }

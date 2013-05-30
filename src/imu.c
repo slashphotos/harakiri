@@ -353,7 +353,7 @@ void getEstimatedAltitude(void)
 
     if (!GroundAltInitialized && newbaroalt == 1)                // Do init here
     {
-      if (IniTimer == 0) IniTimer = currentTime + 2000000;       // 2 Secs of warmup
+      if (IniTimer == 0) IniTimer = currentTime + 4000000;       // 4 Secs of warmup
        else
        {
            if (currentTime >=IniTimer)
@@ -363,14 +363,16 @@ void getEstimatedAltitude(void)
            }
        }
     }
-    if (sensors(SENSOR_SONAR) && SonarStatus !=0)                // SonarStatus is set according GroundAltInitialized in sensors
+    
+    if (sensors(SENSOR_SONAR) && SonarStatus !=0 && GroundAltInitialized) // Only do sonar if available and everything is settled
     {
         if(SonarStatus == 1)                                     // First contact
-            Sonarcorrector = EstAlt + GroundAlt - (int32_t)sonarAlt; // Calculate Correctionfaktor
-        else if (newbaroalt!=0)                                  // We have steady contact, but do we have new barovals as well ?
+            Sonarcorrector = EstAlt + GroundAlt - (int32_t)sonarAlt; // Calculate baro/sonar displacement on 1st contact
+        else                                                     // SonarStatus must be 2 here "steady contact"
+            if (newbaroalt!=0)                                   // We have steady sonar contact, but we need new barovals to CF them
             BaroAlt = (float)(Sonarcorrector + (int32_t)sonarAlt) * cfg.baro_sonar_cf + (float)BaroAlt * (1 - cfg.baro_sonar_cf); // Set weight / make transition smoother
     }
-    else Sonarcorrector = 0;                                     // This line is obsolete, but i like my variables set to 0 if state unknown
+    else Sonarcorrector = 0;                                     // Obsolete, but i like my variables set to 0 if state unknown
 
     ThrAngle = constrain(TiltValue * 100.0f,0,100);
     accalt = accalt + VelUP * ACCDeltaTimeINS;

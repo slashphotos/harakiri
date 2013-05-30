@@ -4,7 +4,6 @@
 uint16_t calibratingA = 0;          // the calibration is done is the main loop. Calibrating decreases at each cycle down to 0, then we enter in a normal mode.
 uint16_t calibratingG = 0;
 uint16_t acc_1G = 256;              // this is the 1G measured acceleration.
-
 extern uint16_t InflightcalibratingA;
 extern int16_t  AccInflightCalibrationArmed;
 extern uint16_t AccInflightCalibrationMeasurementDone;
@@ -110,12 +109,10 @@ retry:
     }
     else sensorsClear(SENSOR_BARO);
 #endif
-    
-    // Now time to init things, acc first
-    if (sensors(SENSOR_ACC))
-        acc.init();
-    // this is safe because either mpu6050 or mpu3050 or lg3d20 sets it, and in case of fail, we never get here.
-    gyro.init();
+
+    GroundAltInitialized = false;                    // Now time to init things
+    if (sensors(SENSOR_ACC)) acc.init();
+    gyro.init();                                     // this is safe because either mpu6050 or mpu3050 or lg3d20 sets it, and in case of fail, we never get here.
 
     // todo: this is driver specific :(
     if (havel3g4200d)
@@ -136,8 +133,7 @@ retry:
     else sensorsClear(SENSOR_MAG);
 #endif
 
-    // calculate magnetic declination
-    deg = cfg.mag_declination / 100;
+    deg = cfg.mag_declination / 100;                 // calculate magnetic declination
     min = cfg.mag_declination % 100;
     magneticDeclination = ((float)deg + ((float)min / 60.0f)); // heading is in deg units no 0.1 deg shit
 }
@@ -470,8 +466,9 @@ void Gyro_getADC(void)
 }
 
 #ifdef SONAR
-void Sonar_init(void)                    // cfg.SONAR_Pinout  0=PWM56  1=RC78 2=I2C (DaddyW)
+void Sonar_init(void)                                                                 // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
 {
+    uint16_t utmp16;
     bool Inisuccess = false;
     switch (cfg.SONAR_Pinout)
     {
@@ -484,57 +481,103 @@ void Sonar_init(void)                    // cfg.SONAR_Pinout  0=PWM56  1=RC78 2=
     case 2:
         Inisuccess = hcsr04_init(sonar_i2cDW);
         break;
+    case 3:
+        Inisuccess = hcsr04_init(sonar_pwm56);
+        break;      
+    case 4:
+        Inisuccess = hcsr04_init(sonar_rc78);
+        break;
     }
-    if (Inisuccess) sensorsSet(SENSOR_SONAR);
-    sonarAlt = -1;
+    
+    if (Inisuccess)
+    {
+        sensorsSet(SENSOR_SONAR);                                                     // Signalize Sonar available (esp with I2C Sonar), or PWM Pins initialized
+      
+        // Check for user configuration error. Set Errorlimit for Sonartype, Errorlimit should cover at least 0.5 sec
+        if (cfg.sonar_min == cfg.sonar_max)                                           // OMG User sets min = max
+        {
+            cfg.sonar_min = 50;                                                       // Use some safe values then
+            cfg.sonar_max = 100;
+        }
+        if (cfg.sonar_min > cfg.sonar_max)                                            // OMG User mixed up min & max
+        {
+            utmp16 = cfg.sonar_max;                                                   // Swap values
+            cfg.sonar_max = cfg.sonar_min;
+            cfg.sonar_min = utmp16;
+        }
+        if (cfg.SONAR_Pinout == 0 || cfg.SONAR_Pinout == 1)                           // Check for HC-SR04
+        {
+            if (cfg.sonar_min < 5)   cfg.sonar_min = 5;                               // Adjust sonar_min for HC-SR04
+            if (cfg.sonar_max > 400) cfg.sonar_max = 400;                             // Adjust sonar_max for HC-SR04
+        }                                                                             // no "else" stuff here to make it easily expandable
+        if (cfg.SONAR_Pinout == 3 || cfg.SONAR_Pinout == 4)                           // Check for Maxbotics
+        {
+            if (cfg.sonar_min < 25)  cfg.sonar_min = 25;                              // Adjust sonar_min for Maxbotics
+            if (cfg.sonar_max > 700) cfg.sonar_max = 700;                             // Adjust sonar_max for Maxbotics Note: some might do >10m! we limit it here
+        }
+        sonarAlt = -1;                                                                // Initialize with errorvalue
+    }
 }
 
+#define SonarErrorLimit 5                                                             // We will bridge 5 consecutive faulty reads, HC-SR04 = 300ms Maxbotix = 500ms
 void Sonar_update(void)
 {
-    static  int16_t  lastsonaralt;
-    static  uint32_t AcceptNewTimer;
-    uint8_t utmp8;
+    static  int16_t  LastGoodSonarAlt = -1;                                           // Initialize with errorvalue
+    static  uint32_t AcceptTimer = 0;
+    static  uint8_t  Errorcnt = 0;                                                    // This is compared to SonarErrorLimit
+    bool    newdata = false;
+    uint8_t tilt;
     uint8_t LastStatus = SonarStatus;                                                 // Save Last Status here for comparison
 
-    switch (cfg.SONAR_Pinout)                                                         // Aquire Data, use "switch" for further extensions
+    switch (cfg.SONAR_Pinout)                                                         // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
     {
-    case 0:                                                                           // sonar_pwm56
-    case 1:                                                                           // sonar_rc78
-        hcsr04_get_distancePWM(&sonarAlt);
+    case 0:                                                                           // sonar_pwm56 HC-SR04
+    case 1:                                                                           // sonar_rc78  HC-SR04
+        newdata = hcsr04_get_distancePWM(&sonarAlt);                                  // Look for HC-SR04 Sonar Data
         break;
     case 2:
-        hcsr04_get_i2c_distanceDW(&sonarAlt);
+        newdata = hcsr04_get_i2c_distanceDW(&sonarAlt);                               // Ask DaddyW I2C Sonar for Data
+        break;
+    case 3:                                                                           // sonar_pwm56 Maxbotics
+    case 4:                                                                           // sonar_rc78  Maxbotics
+        newdata = hcsr04_get_distancePWMMB(&sonarAlt);                                // Look for Maxbotics Sonar Data
         break;
     }
-  
-    utmp8 = 100 - constrain(TiltValue * 100.0f,0,100);                                // We don't care for upsidedownstuff, because althold is disabled than anyways
-    if (utmp8 > cfg.sonar_tilt) sonarAlt = -1;                                        // Error if too tilted, deal with it below
-    if (cfg.sonar_debug == 1) debug[1] = utmp8;                                       // Prints out Tiltangle, but actually not degrees, 90 Degrees will be 100
 
-    if (sonarAlt > cfg.sonar_min && sonarAlt < cfg.sonar_max && GroundAltInitialized) // Let Baro do it's Groundaltstuff first
+    if (newdata)
     {
-        if (lastsonaralt != -1 && lastsonaralt != sonarAlt)                           // Check for new Data
+        tilt = 100 - constrain(TiltValue * 100.0f,0,100);                             // We don't care for upsidedownstuff, because althold is disabled than anyway
+        if (cfg.sonar_debug == 1) debug[1] = tilt;                                    // Prints out Tiltangle, but actually not degrees, 90 Degrees will be 100
+        if (sonarAlt > cfg.sonar_min && sonarAlt < cfg.sonar_max && tilt < cfg.sonar_tilt)
         {
-            if (abs(lastsonaralt - sonarAlt) > 20)                                    // Too much difference(cm) between reads (60ms) so "20" is somtehing like 3m/s
+            LastGoodSonarAlt = sonarAlt;
+            Errorcnt = 0;
+        }
+        else
+        {                                                                             // So sonarvalues are not sane here
+            Errorcnt++;                                                               // We overshoot here but np the ubyte is more than enough
+            if (Errorcnt < SonarErrorLimit)
+                sonarAlt = LastGoodSonarAlt;                                          // Bridge error with last value, when it's -1 we take care later
+            else
             {
+                Errorcnt = SonarErrorLimit;
                 sonarAlt = -1;
-                AcceptNewTimer = 0;
-                SonarStatus = 0;                                                      // 0 = no contact          
             }
         }
+        
+        if (sonarAlt == -1)                                                           // Handle error here separately
+        {
+            LastGoodSonarAlt = -1;
+            sonarAlt = -1;
+            SonarStatus = 0;
+            AcceptTimer = 0;
+        }
     }
-    else
-    {
-        sonarAlt       = -1;                                                          // Signalize invalid Sonar
-        AcceptNewTimer = 0;
-        SonarStatus    = 0;                                                           // 0 = no contact
-    }
-    lastsonaralt = sonarAlt;                                                          // Store last Sonaralt here for Comparison
     if (LastStatus == 0 && sonarAlt != -1) SonarStatus = 1;                           // Definition of "SonarStatus" 0 = no contact, 1 = Made first contact, 2 = Steady contact
-    if (LastStatus == 1 && sonarAlt != -1 && AcceptNewTimer == 0)
-        AcceptNewTimer = currentTime + 200000;                                        // Set 200 ms before accepting new Sonar contact
-    if (AcceptNewTimer !=0 && currentTime >= AcceptNewTimer)
-        SonarStatus = 2;
+    if (LastStatus == 1 && sonarAlt != -1 && AcceptTimer == 0)                        // getEstimatedAltitude prepares with a sonar/baro offset for the real thing (status = 2)
+        AcceptTimer = currentTime + 550000;                                           // Set 550 ms timeout before signalizing "steady contact" this exceeds our "bridging" from above
+    if (AcceptTimer != 0 && currentTime >= AcceptTimer)
+        SonarStatus = 2;                                                              // 2 = Steady contact // imu/getEstimatedAltitude will be happy to know
 }
 #endif
 

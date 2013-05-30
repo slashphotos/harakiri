@@ -212,7 +212,7 @@ static void resetConf(void)
     cfg.accz_vel_cf               = 0.985f;     // Crashpilot: Value for complementary filter accz and barovelocity
     cfg.accz_alt_cf               = 0.940f;     // Crashpilot: Value for complementary filter accz and altitude
     cfg.baro_lag                  = 0.3f;       // Lag of Baro/Althold stuff in general, makes stop in hightchange snappier
-    cfg.baro_sonar_cf             = 0.9f;       // The bigger, the more Sonarinfluence, makes switch between them smoother and baroinfluence in sonarmode
+    cfg.baro_sonar_cf             = 0.9f;       // The bigger, the more Sonarinfluence, makes switch between them smoother and defines baroinfluence when sonarcontact. 1.0f just takes Sonar, if contact (otherwise baro)
     cfg.barodownscale             = 0.7f;       // Scale downmovement down (because copter drops faster than rising)
     // Autoland
     cfg.autolandrate              = 80;         // Temporary value "64" increase to increase Landingspeed
@@ -328,12 +328,41 @@ static void resetConf(void)
     cfg.LED_Pattern3			        = 1900; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
     cfg.LED_Toggle_Delay          = 0x08; 	    // slow down LED_Pattern
 
-    // Sonar Stuff
-    cfg.SONAR_Pinout              = 0;          // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross)
-    cfg.sonar_min                 = 0;          // Valid Sonar minimal range in cm (0-200)
-    cfg.sonar_max                 = 200;        // Valid Sonar maximal range in cm (0-700)
-    cfg.sonar_debug               = 0;          // 1 Sends Sonardata to debug[0] and tiltvalue to debug[1]
-    cfg.sonar_tilt                = 30;         // Somehow copter tiltrange in degrees (not exactly) in wich Sonar is possible
+    // SONAR
+
+    // SOME INFO ON SONAR:
+    // PWM56 are 5V resistant, RC78 only tolerate 3.3V(!!) so add a 1K Ohms resistor!!!
+    // Note: You will never see the maximum possible sonar range in a copter, so go for the half of it (or less?)
+    //
+    // Connection possibilities depending on Receivertype:
+    // PPSUM: RC78 possible, PWM56 possible (on max. quadcopters, see below)
+    // Normal RX: Just Connection on Motorchannel 5&6 (PWM56) is possible.
+    // The PWM56 sonar connection option is only available in setups with max motors 4, otherwise sonar is not initialized.
+    //
+    // HC-SR04:
+    // Operation Voltage: 5V (!! Use PWM56 or 1K resistor !!)
+    // Range: 2cm - 400cm
+    // Angle: 15 Degrees (I found that copter tiltrange 25 is ok though)
+    //
+    // Maxbotics in general
+    // Operation Voltage: (some 2.5V)3.3V - 5V ((!! Use PWM56 or resistor with 5V !!)
+    // Only wire the Maxbotics for PWM output (more precise anyway), not the analog etc. modes, just wire echopin (normally pin 2)
+    // Range: 20cm(!) - 765cm (some >1000cm), MaxTiltAngle is not specified, depending on Model
+    // Tested on MB1200 XL-MaxSonar-EZ0
+    //
+    // GENERAL WARNING: DON'T SET sonar_min TOO LOW, OTHERWISE THE WRONG SONARVALUE WILL BE TAKEN AS REAL MEASUREMENT!!
+    // I implemented some checks to prevent that user error, but still keep that in mind.
+    // Min/Max are checked and changed if they are too stupid for your sonar. So if you suddenly see other values, thats not an eeprom error or so.
+    // MAXBOTICS: SET sonar_min to at least 25! I check this in sensors and change the value, if needed.
+    // HC-SR04:   SET sonar_min to at least 5 ! I check this in sensors and change the value, if needed.
+    // DaddyWalross Sonar: I DON'T KNOW! Set sonar_min to 0 and sonar_debug = 1 and look, what the minimal reported distance is in debug[0] and add a few cm for safety.
+    // NOTE: I limited Maxbotics to 7 meters in the code, knowing that some types will do >10m, if you have one of them 7m is still the limit for you.
+    // NOTE for coders: The Maxbotics driver is designed to read out Maxbotics pwm signal up to 62ms (like in the datasheet) that is 1068.97 cm
+    cfg.SONAR_Pinout              = 0;          // 0 = PWM56 HC-SR04, 1 = RC78 HC-SR04, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
+    cfg.sonar_min                 = 5;          // Valid Sonar minimal range in cm (0-200) see warning above
+    cfg.sonar_max                 = 200;        // Valid Sonar maximal range in cm (50-800)
+    cfg.sonar_debug               = 0;          // 1 Sends Sonardata (within defined range and tilt) to debug[0] and tiltvalue to debug[1]
+    cfg.sonar_tilt                = 25;         // Somehow copter tiltrange in degrees (Not exactly but good enough. Value * 0.9 = realtilt) in wich Sonar is possible
 
     // custom mixer. clear by defaults.
     for (i = 0; i < MAX_MOTORS; i++) cfg.customMixer[i].throttle = 0.0f;

@@ -440,6 +440,7 @@ static void evaluateCommand(void)
 }
 
 // evaluate all other incoming serial data
+
 static void evaluateOtherData(uint8_t sr)
 {
     switch (sr)
@@ -482,8 +483,8 @@ void serialCom(void)
         if (c_state == IDLE)
         {
             c_state = (c == '$') ? HEADER_START : IDLE;
-            if (c_state == IDLE)
-                evaluateOtherData(c); // evaluate all other incoming serial data
+            if (c_state == IDLE && !f.ARMED)             // Idea CGiesen, only allow cli and reset when disarmed
+                evaluateOtherData(c);                    // evaluate all other incoming serial data
         }
         else if (c_state == HEADER_START)
         {

@@ -432,6 +432,7 @@ void pass(void)                                                      // Crashpil
         else pwmWriteMotor(cfg.passmotor-1, rcData[THROTTLE]);       // Specific Motor?
         failsafeCnt++;
     }
+    f.ARMED = 0;                                                     // Always set this as a dummy so serial com accepts "#" and "R"
     serialCom();
     if ((int32_t)(timetmp - blinktime) >= 0)
     {
@@ -890,7 +891,6 @@ void loop(void)
         }
 #endif
 
-
         if (sensors(SENSOR_GPS))
         {
 
@@ -957,7 +957,7 @@ void loop(void)
         if (cfg.sonar_debug == 1) debug[0] = sonarAlt;
     }
 #endif
-    
+
 #ifdef MAG
     if (sensors(SENSOR_MAG)) Mag_getADC();
 #endif

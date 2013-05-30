@@ -144,7 +144,7 @@ const mixer_t mixers[] =
     { 0, 0, NULL },                // MULTITYPE_CUSTOM
 };
 
-void mixerInit(void)
+uint8_t mixerInit(void)
 {
     int i;
 
@@ -176,6 +176,7 @@ void mixerInit(void)
                 currentMixer[i] = mixers[cfg.mixerConfiguration].motor[i];
         }
     }
+    return numberMotor;
 }
 
 void mixerLoadMix(int index)

@@ -553,8 +553,8 @@ bool pwmInit(drv_pwm_config_t *init)
         if (init->useRC6   && port == PWM6)                    // skip RC6 ports for MONO_LED
             continue;
 
-        if (init->usePWM56 && (port == PWM5 || port == PWM6))  // skip PWM5 ports for SONAR
-            continue;
+        if (init->usePWM56 && (port == PWM13 || port == PWM14))// skip PWM5 ports for SONAR they are pwm13/14 in other nomenclature
+            continue;        
 
         if (init->useRC78  && (port == PWM7 || port == PWM8))  // skip RC78 ports for SONAR
             continue;
