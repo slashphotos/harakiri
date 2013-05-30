@@ -136,13 +136,12 @@ static void resetConf(void)
     cfg.mixerConfiguration = MULTITYPE_QUADX;
     featureClearAll();
 //    featureSet(FEATURE_VBAT);
-    featureSet(FEATURE_PPM);                    // Crashpilot
+//    featureSet(FEATURE_PPM);                    // Crashpilot
 //    featureSet(FEATURE_FAILSAFE);               // Crashpilot
-    featureSet(FEATURE_LCD);                    // Crashpilot
+//    featureSet(FEATURE_LCD);                    // Crashpilot
 //    featureSet(FEATURE_GPS);                    // Crashpilot
 //    featureSet(FEATURE_PASS);                   // Just pass Throttlechannel Crashpilot
-    featureSet(FEATURE_SONAR);
-
+//    featureSet(FEATURE_SONAR);
 
     cfg.P8[ROLL]                  = 40;
     cfg.I8[ROLL]                  = 20;
@@ -159,16 +158,15 @@ static void resetConf(void)
     cfg.I8[PIDALT]                = 30;
     cfg.D8[PIDALT]                = 80;
 
-
-    cfg.P8[PIDPOS]                = 35;         // FIND YOUR VALUE
+    cfg.P8[PIDPOS]                = 12;         // FIND YOUR VALUE
     cfg.I8[PIDPOS]                = 0;          // NOT USED
     cfg.D8[PIDPOS]                = 0;          // NOT USED
 
-    cfg.P8[PIDPOSR]               = 50;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
+    cfg.P8[PIDPOSR]               = 70;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
     cfg.I8[PIDPOSR]               = 0;          // DANGER "I" may lead to circeling   // Controls the speed part with my PH logic
-    cfg.D8[PIDPOSR]               = 45;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
+    cfg.D8[PIDPOSR]               = 50;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
 
-    cfg.P8[PIDNAVR]               = 20;         // Crashpilot: Double the value
+    cfg.P8[PIDNAVR]               = 20;         // More ?
     cfg.I8[PIDNAVR]               = 20;         // NAV_I * 100;                       // Scaling/Purpose unchanged
     cfg.D8[PIDNAVR]               = 80;         // NAV_D * 1000;                      // Scaling/Purpose unchanged
 
@@ -203,21 +201,25 @@ static void resetConf(void)
     cfg.mag_oldcalib              = 0;          // 1 = old hard iron calibration // 0 = extended calibration (better)
     cfg.acc_hardware              = 2;          // Crashpilot MPU6050
     cfg.acc_lpf_factor            = 100;	      // changed 27.11.2012
-    cfg.acc_ins_lpf               = 10;         // General LPF for INS
+    cfg.acc_ins_lpf               = 10;         // General LPF for all INS stuff
 
     cfg.looptime                  = 3000;	      // changed 27.11.2012 //    cfg.acc_lpf_factor = 4;
     cfg.oldcontroller             = 0;          // 1 selects the more or less the original BF main PID Controller
     cfg.gyro_cmpf_factor          = 400;        // default MWC
     cfg.gyro_lpf                  = 42;         // Possible values 256 188 98 42 20 10 (HZ)
+
+    // Baro
     cfg.accz_vel_cf               = 0.985f;     // Crashpilot: Value for complementary filter accz and barovelocity
     cfg.accz_alt_cf               = 0.940f;     // Crashpilot: Value for complementary filter accz and altitude
     cfg.baro_lag                  = 0.3f;       // Lag of Baro/Althold stuff in general, makes stop in hightchange snappier
-    cfg.baro_sonar_cf             = 0.9f;       // The bigger, the more Sonarinfluence, makes switch between them smoother and defines baroinfluence when sonarcontact. 1.0f just takes Sonar, if contact (otherwise baro)
     cfg.barodownscale             = 0.7f;       // Scale downmovement down (because copter drops faster than rising)
-    // Autoland
-    cfg.autolandrate              = 80;         // Temporary value "64" increase to increase Landingspeed
 
-    cfg.nazedebug                 = 0;          // Crashpilot: 1 = Debug Barovalues //cfg.baro_noise_lpf = 0.6f;// Crashpilot: Not used anymore//cfg.baro_cf = 0.985f;// Crashpilot: Not used anymore
+    // Autoland
+    cfg.al_barolr                 = 75;         // Temporary value "64" increase to increase Landingspeed
+    cfg.al_snrlr                  = 75;         // You can specify different landingfactor here on sonar contact, because sonar land maybe too fast when snr_cf is high
+    cfg.al_lndpercent             = 0;          // (0-80%) Defines the Throttlepercentage when landing can be detected (landtimeoutcounter kicks off)
+
+    cfg.baro_debug                = 0;          // Crashpilot: 1 = Debug Barovalues //cfg.baro_noise_lpf = 0.6f;// Crashpilot: Not used anymore//cfg.baro_cf = 0.985f;// Crashpilot: Not used anymore
     cfg.moron_threshold           = 32;
     cfg.gyro_smoothing_factor     = 0x00141403; // default factors of 20, 20, 3 for R/P/Y
     cfg.vbatscale                 = 110;
@@ -230,7 +232,6 @@ static void resetConf(void)
     cfg.deadband                  = 10;         // Crashpilot: A little deadband will not harm our crappy RC
     cfg.yawdeadband               = 15;         // Crashpilot: A little deadband will not harm our crappy RC
     cfg.alt_hold_throttle_neutral = 50;         // Crashpilot: A little deadband will not harm our crappy RC
-    cfg.phdeadband                = 5;          // This Deadband adds to cfg.deadband
 
     // cfg.spektrum_hires = 0;
     cfg.midrc                     = 1500;
@@ -241,9 +242,9 @@ static void resetConf(void)
     cfg.killswitchtime            = 0;          // Time in ms when your arm switch becomes a Killswitch, 0 disables the Killswitch, can not be used together with FEATURE_INFLIGHT_ACC_CAL
 
     // Motor/ESC/Servo
-//    cfg.minthrottle               = 1150;       // ORIG
+    cfg.minthrottle               = 1150;       // ORIG
 //    cfg.minthrottle               = 1220;
-	  cfg.minthrottle               = 1080;
+//	  cfg.minthrottle               = 1080;
     cfg.maxthrottle               = 1950;
     cfg.passmotor                 = 0;          // Crashpilot: Only used with feature pass. If 0 = all Motors, otherwise specific Motor
     cfg.mincommand                = 1000;
@@ -282,22 +283,20 @@ static void resetConf(void)
     // gps/nav
     cfg.gps_type                  = 1;          // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3, GPS_UBLOX_DUMB = 4
     cfg.gps_baudrate              = 38400;      // Changed 5/3/13 was 115200;
+    cfg.gps_debug                 = 0;          // Prints out the raw GPS values in GUI for testing
     cfg.gps_ins_vel               = 0.72f;      // Crashpilot GPS INS The LOWER the value the closer to gps speed // Dont go to high here
-    cfg.gps_lag                   = 1.0f;       // This is to overcome GPS LAG, it is applied only if greater than gps_ph_settlespeed
-    cfg.gps_speedfilter           = 0.80f;      // The higher the more filter
+    cfg.gps_lag                   = 1.0f;       // This is to overcome GPS LAG, currently just used to project GPS on PH - moving
     cfg.gps_phase                 = 0;          // Make a phaseshift +-90 Deg max of GPS output
     cfg.gps_ph_minsat             = 6;          // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
-    cfg.gps_ph_apm                = 0;          // If 1 the original APM PH Controller is used and original parameter scaling
-    cfg.gps_ph_settlespeed        = 150;        // PH settlespeed in cm/s
+    cfg.gps_ph_settlespeed        = 80;         // PH settlespeed in cm/s
     cfg.gps_ph_targetsqrt         = 2;          // This is the speed target of PH. That means if the copter moves faster than that, the maximal tiltangle reduced dramatically. Just think of the value as a working point for the sqrt brake
     cfg.gps_minanglepercent       = 15;         // Percent 1 - 100% of gps_maxangle for minimal tilt, as lower limit for "gps_ph_targetsqrt"
     cfg.gps_maxangle              = 25;         // maximal over all GPS bank angle
-    cfg.gps_phmove_speed          = 0.0f;       // DONT USE THIS FOR FLIGHT! PH move speed // 0 disables PH move - recommended!!
     cfg.gps_wp_radius             = 200;
     cfg.gps_rtl_minhight          = 20;         // (0-200) Minimal RTL hight in m, 0 disables feature
 //	  cfg.gps_rtl_minhight          = 0;          // (0-200) Minimal RTL hight in m, 0 disables feature
     cfg.gps_rtl_mindist           = 0;          // 0 Disables. Minimal distance for RTL in m, otherwise it will just autoland, prevent Failsafe jump in your face, when arming copter and turning off TX
-    cfg.gps_rtl_flyaway           = 0;          // 0 Disables. If during RTL the distance increases beyond this value (in meters), something is wrong, autoland
+    cfg.gps_rtl_flyaway           = 0;          // 0 Disables. If during RTL the distance increases beyond this value (in meters relative to RTL activation point), something is wrong, autoland
     cfg.gps_yaw                   = 30;         // Thats the MAG P during GPS functions, substitute for "cfg.P8[PIDMAG]"
     cfg.nav_rtl_lastturn          = 1;          // 1 = when copter gets to home position it rotates it's head to takeoff direction independend of nav_controls_heading
     cfg.nav_slew_rate             = 50;         // was 30 and 50 before
@@ -313,12 +312,13 @@ static void resetConf(void)
     cfg.failsafe_throttle         = 1200;       // decent default which should always be below hover throttle for people.
     cfg.failsafe_deadpilot        = 0;		      // DONT USE, EXPERIMENTAL Time in sec when FS is engaged after idle on THR/YAW/ROLL/PITCH, 0 disables max 250
     cfg.failsafe_justph           = 0;          // Does just PH&Autoland an not RTL, use this in difficult areas with many obstacles to avoid RTL crash into something
+    cfg.failsafe_ignoreSNR        = 1;          // When snr_land is set to 1, it is possible to ignore that on Failsafe, because FS over a tree could turn off copter
 
     // serial (USART1) baudrate
     cfg.serial_baudrate           = 115200;
 
     // LED Stuff
-    cfg.led_invert                = 0;          // Crashpilot: Inversion of LED 0&1 Partly implemented because Bootup is not affected
+    cfg.LED_invert                = 0;          // Crashpilot: Inversion of LED 0&1 Partly implemented because Bootup is not affected
     cfg.LED_Type                  = 1;		      // 1=MWCRGB / 2=MONO_LED / 3=LEDRing
     cfg.LED_Pinout                = 1;		      // rc6
     cfg.LED_ControlChannel        = 8;		      // AUX4 (Channel 8)
@@ -326,7 +326,9 @@ static void resetConf(void)
     cfg.LED_Pattern1			        = 1300; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
     cfg.LED_Pattern2			        = 1800; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
     cfg.LED_Pattern3			        = 1900; 		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
-    cfg.LED_Toggle_Delay          = 0x08; 	    // slow down LED_Pattern
+    cfg.LED_Toggle_Delay1         = 0x08;       // slow down LED_Pattern
+    cfg.LED_Toggle_Delay2         = 0x08;       // slow down LED_Pattern
+    cfg.LED_Toggle_Delay3         = 0x08;       // slow down LED_Pattern
 
     // SONAR
 
@@ -342,7 +344,7 @@ static void resetConf(void)
     // HC-SR04:
     // Operation Voltage: 5V (!! Use PWM56 or 1K resistor !!)
     // Range: 2cm - 400cm
-    // Angle: 15 Degrees (I found that copter tiltrange 25 is ok though)
+    // Angle: 15 Degrees (Test out for yourself: cfg.snr_tilt = X)
     //
     // Maxbotics in general
     // Operation Voltage: (some 2.5V)3.3V - 5V ((!! Use PWM56 or resistor with 5V !!)
@@ -350,20 +352,23 @@ static void resetConf(void)
     // Range: 20cm(!) - 765cm (some >1000cm), MaxTiltAngle is not specified, depending on Model
     // Tested on MB1200 XL-MaxSonar-EZ0
     //
-    // GENERAL WARNING: DON'T SET sonar_min TOO LOW, OTHERWISE THE WRONG SONARVALUE WILL BE TAKEN AS REAL MEASUREMENT!!
+    // GENERAL WARNING: DON'T SET snr_min TOO LOW, OTHERWISE THE WRONG SONARVALUE WILL BE TAKEN AS REAL MEASUREMENT!!
     // I implemented some checks to prevent that user error, but still keep that in mind.
     // Min/Max are checked and changed if they are too stupid for your sonar. So if you suddenly see other values, thats not an eeprom error or so.
-    // MAXBOTICS: SET sonar_min to at least 25! I check this in sensors and change the value, if needed.
-    // HC-SR04:   SET sonar_min to at least 5 ! I check this in sensors and change the value, if needed.
-    // DaddyWalross Sonar: I DON'T KNOW! Set sonar_min to 0 and sonar_debug = 1 and look, what the minimal reported distance is in debug[0] and add a few cm for safety.
+    // MAXBOTICS: SET snr_min to at least 25! I check this in sensors and change the value, if needed.
+    // HC-SR04:   SET snr_min to at least 5 ! I check this in sensors and change the value, if needed.
+    // DaddyWalross Sonar: I DON'T KNOW! Set snr_min to 0 and snr_debug = 1 and look, what the minimal reported distance is in debug[0] and add a few cm for safety.
     // NOTE: I limited Maxbotics to 7 meters in the code, knowing that some types will do >10m, if you have one of them 7m is still the limit for you.
-    // NOTE for coders: The Maxbotics driver is designed to read out Maxbotics pwm signal up to 62ms (like in the datasheet) that is 1068.97 cm
-    cfg.SONAR_Pinout              = 0;          // 0 = PWM56 HC-SR04, 1 = RC78 HC-SR04, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
-    cfg.sonar_min                 = 5;          // Valid Sonar minimal range in cm (0-200) see warning above
-    cfg.sonar_max                 = 200;        // Valid Sonar maximal range in cm (50-800)
-    cfg.sonar_debug               = 0;          // 1 Sends Sonardata (within defined range and tilt) to debug[0] and tiltvalue to debug[1]
-    cfg.sonar_tilt                = 25;         // Somehow copter tiltrange in degrees (Not exactly but good enough. Value * 0.9 = realtilt) in wich Sonar is possible
-
+    // NOTE: For coders: The Maxbotics driver is designed to read out Maxbotics pwm signal up to 62ms (like in the datasheet) that is 1068.97 cm
+    // NOTE: Sonar is def. not a must - have.
+    cfg.snr_type                  = 3;          // 0 = PWM56 HC-SR04, 1 = RC78 HC-SR04, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
+    cfg.snr_min                   = 25;         // Valid Sonar minimal range in cm (0-200) see warning above
+    cfg.snr_max                   = 200;        // Valid Sonar maximal range in cm (50-800)
+    cfg.snr_debug                 = 0;          // 1 Sends Sonardata (within defined range and tilt) to debug[0] and tiltvalue to debug[1]
+    cfg.snr_tilt                  = 18;         // Somehow copter tiltrange in degrees (Not exactly but good enough. Value * 0.9 = realtilt) in wich Sonar is possible
+    cfg.snr_cf                    = 0.6f;       // The bigger, the more Sonarinfluence, makes switch between Baro/Sonar smoother and defines baroinfluence when sonarcontact. 1.0f just takes Sonar, if contact (otherwise baro)
+    cfg.snr_diff                  = 0;          // 0 disables that check. Range (0-200) Maximal allowed difference in cm between sonar readouts (100ms rate and snr_diff = 50 means max 5m/s)
+    cfg.snr_land                  = 1;          // Aided Sonar - landing, by setting upper throttle limit to current throttle. - Beware of Trees!! Can be disabled for Failsafe with failsafe_ignoreSNR = 1
     // custom mixer. clear by defaults.
     for (i = 0; i < MAX_MOTORS; i++) cfg.customMixer[i].throttle = 0.0f;
     writeParams(0);

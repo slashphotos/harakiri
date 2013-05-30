@@ -13,7 +13,6 @@ static void _putc(void *p, char c)
     uartWrite(c);
 }
 
-
 int main(void)
 {
     uint8_t i;
@@ -92,10 +91,10 @@ int main(void)
     pwm_params.useRC78  = false;
     pwm_params.usePWM56 = false;
 
-#ifdef SONAR                                  // Do Sonars depending on Rc configuration. I2C Sonar needs no further attention here
-    if (feature(FEATURE_SONAR))
+#ifdef SONAR
+    if (feature(FEATURE_SONAR))               // Set Sonar PWM Channels depending on Rc configuration. I2C Sonar needs no further attention here
     {
-        switch(cfg.SONAR_Pinout)              // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
+        switch(cfg.snr_type)                  // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
         {
         case 0:
             if (NumberOfMotors < 5) pwm_params.usePWM56 = true; // Only do this with 4 Motors or less
@@ -157,10 +156,10 @@ int main(void)
 
     if (!feature(FEATURE_PASS))
     {
-#ifdef SONAR                               // Initialize Sonars here depending on Rc configuration.
-        if (feature(FEATURE_SONAR))
+#ifdef SONAR
+        if (feature(FEATURE_SONAR))        // Initialize Sonars here depending on Rc configuration.
         {
-            switch(cfg.SONAR_Pinout)       // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
+            switch(cfg.snr_type)           // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
             {
             case 0:
                 if (NumberOfMotors < 5) Sonar_init();

@@ -105,7 +105,7 @@ bool hcsr04_init(sonar_config_t config)
 	  uint8_t bufdaddy[2];                                        // Dummy for i2c testread
     // enable AFIO for EXTI support - already done is drv_system.c
     // RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO | RCC_APB2Periph, ENABLE); 
-    // cfg.SONAR_Pinout = X;  0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
+    // cfg.snr_type = X;  0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
     switch(config)
     {
     case sonar_pwm56:
@@ -131,9 +131,9 @@ bool hcsr04_init(sonar_config_t config)
     }
     if (config == sonar_pwm56 || config == sonar_rc78)
     {
-        if (cfg.SONAR_Pinout == 0 || cfg.SONAR_Pinout == 1)     // Check for HC-SR04    
+        if (cfg.snr_type == 0 || cfg.snr_type == 1)             // Check for HC-SR04    
             PulseLimitInUs = 24000;                             // HC-SR04 Limit 413 cm
-        if (cfg.SONAR_Pinout == 3 || cfg.SONAR_Pinout == 4)     // Check for Maxbotics (no "else" stuff here to make it expandable)
+        if (cfg.snr_type == 3 || cfg.snr_type == 4)             // Check for Maxbotics (no "else" stuff here to make it expandable)
             PulseLimitInUs = 62000;                             // Datasheet Limit 62ms
         // tp - trigger pin 
         GPIO_InitStructure.GPIO_Pin = trigger_pin;

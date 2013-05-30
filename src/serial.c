@@ -286,10 +286,10 @@ static void evaluateCommand(void)
         headSerialReply(14);
         serialize8(f.GPS_FIX);
         serialize8(GPS_numSat);
-        if (cfg.gps_phmove_speed != 0)
+        if (cfg.gps_debug == 1)
         {
-            serialize32(GPS_WP[LAT]);
-            serialize32(GPS_WP[LON]);
+            serialize32(Real_GPS_coord[LAT]);
+            serialize32(Real_GPS_coord[LON]);
         }
         else
         {

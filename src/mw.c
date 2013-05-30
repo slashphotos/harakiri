@@ -33,14 +33,17 @@ float    magHold;
 float    magneticDeclination;
 
 // **********************
-// SONAR
+// SONAR /BARO /AUTOLAND
 // **********************
 uint8_t  SonarStatus = 0;                                            // 0 = no contact, 1 = made contact, 2 = steady contact
+uint8_t  SonarBreach = 0;                                            // 0 = Breach unknown, 1 = breached lower limit, 2 = breached upper limit (not used)
+uint16_t LandDetectMinThr = 0;                                       // Is set upon Baro initialization in sensors/sensorsAutodetect
 
 // **********************
 // GPS
 // **********************
-int32_t  GPS_coord[2];
+int32_t  GPS_coord[2];                                               // They contain some ins as well
+int32_t  Real_GPS_coord[2];                                          // Pure GPS Coords
 int32_t  GPS_home[2];
 int32_t  GPS_WP[2];                                                  // Currently used WP
 uint8_t  GPS_numSat;
@@ -75,27 +78,28 @@ uint16_t batteryWarningVoltage;                                      // annoying
 
 //MWCRGB
 uint32_t LED_Value = 1500;
+uint8_t  LED_Value_Delay = 8;
 
 // Crashpilot LED Inverter stuff
 void LD0_OFF(void)
 {
-    if (cfg.led_invert == 0) LED0_OFF;
-    if (cfg.led_invert == 1) LED0_ON;
+    if (cfg.LED_invert == 0) LED0_OFF;
+    if (cfg.LED_invert == 1) LED0_ON;
 }
 void LD0_ON(void)
 {
-    if (cfg.led_invert == 0) LED0_ON;
-    if (cfg.led_invert == 1) LED0_OFF;
+    if (cfg.LED_invert == 0) LED0_ON;
+    if (cfg.LED_invert == 1) LED0_OFF;
 }
 void LD1_OFF(void)
 {
-    if (cfg.led_invert == 0) LED1_OFF;
-    if (cfg.led_invert == 1) LED1_ON;
+    if (cfg.LED_invert == 0) LED1_OFF;
+    if (cfg.LED_invert == 1) LED1_ON;
 }
 void LD1_ON(void)
 {
-    if (cfg.led_invert == 0) LED1_ON;
-    if (cfg.led_invert == 1) LED1_OFF;
+    if (cfg.LED_invert == 0) LED1_ON;
+    if (cfg.LED_invert == 1) LED1_OFF;
 }
 
 void blinkLED(uint8_t num, uint8_t wait, uint8_t repeat)
@@ -246,25 +250,45 @@ void annexCode(void)
         }
         if (cfg.LED_Type == 2)                                       // MONO_LED
         {
-            //Update the leds every frame, must also be called if leds are disabled now
-            if (failsafeCnt > 5) LED_Value = 2100;
-            else if (buzzerFreq > 3) LED_Value = 2200;               // Changed http://fpv-treff.de/viewtopic.php?f=18&t=1368&start=1660#p33083
-            else
-            {
-                if ((cfg.LED_Armed == 1) || f.ARMED)
-                {
-                    if (rcData[cfg.LED_ControlChannel - 1] < 1300)
-                        LED_Value = cfg.LED_Pattern1;
-                    else if ((rcData[cfg.LED_ControlChannel - 1] >= 1300) && (rcData[cfg.LED_ControlChannel - 1] <= 1700))
-                        LED_Value = cfg.LED_Pattern2;
-                    else
-                        LED_Value = cfg.LED_Pattern3;
-                }
-                else LED_Value = 1000;
-            }
-            ledToggleUpdate(true);
+           if (failsafeCnt > 5)                                      // Update the leds every frame, must also be called if leds are disabled now
+           {
+              LED_Value = 2100;
+              LED_Value_Delay = 10;
+           }
+           else if (buzzerFreq > 3)
+           {
+              LED_Value = 2200;
+              LED_Value_Delay = 10;
+           }
+           else
+           {
+              if ((cfg.LED_Armed == 1) || f.ARMED)
+              {
+                 if (rcData[cfg.LED_ControlChannel - 1] < 1300)
+                 {
+                    LED_Value = cfg.LED_Pattern1;
+                    LED_Value_Delay=cfg.LED_Toggle_Delay1;
+                 }
+                 else if ((rcData[cfg.LED_ControlChannel - 1] >= 1300) && (rcData[cfg.LED_ControlChannel - 1] <= 1700))
+                 {
+                    LED_Value = cfg.LED_Pattern2;
+                    LED_Value_Delay=cfg.LED_Toggle_Delay2;
+                 }
+                 else
+                 {
+                    LED_Value = cfg.LED_Pattern3;
+                    LED_Value_Delay=cfg.LED_Toggle_Delay3;
+                 }
+              }
+              else
+              {
+                 LED_Value = 1000;
+                 LED_Value_Delay=10;
+              }
+           }
+           ledToggleUpdate(true);
         }
-        else ledToggleUpdate(false);
+        else ledToggleUpdate(false);        
     }
 
     if ((int32_t)(currentTime - calibratedAccTime) >= 0)
@@ -421,7 +445,7 @@ void pass(void)                                                      // Crashpil
         rctimer = timetmp + 20000;
         if (!feature(FEATURE_SPEKTRUM)) computeRC();
         GetActualRCdataOutRCDataSave();                              // Now we have new rcData to deal and MESS with
-        if (failsafeCnt > 1)
+        if (failsafeCnt > 2)
         {
             rcData[THROTTLE] = cfg.mincommand;                       // Motor off
             writeAllMotors(rcData[THROTTLE]);                        // Set all motors to zero just to be sure if user is messing in cli without saving
@@ -469,6 +493,7 @@ void loop(void)
     static uint32_t AutolandGeneralTimer;
     static uint8_t  AutolandState;
     static int16_t  LastAltThrottle;
+    static int16_t  SnrLandThrlimiter;
     static uint32_t RTLGeneralTimer;
     static uint8_t  RTLstate;
     static int16_t  DistanceToHomeMetersOnRTLstart;
@@ -671,6 +696,7 @@ void loop(void)
                 rcOptions[BOXMAG]      = 1;                          // MAG ON
                 rcOptions[BOXHEADFREE] = 0;                          // HeadFree off
                 rcOptions[BOXBARO]     = 1;                          // Baro On
+                if (cfg.failsafe_ignoreSNR == 1) cfg.snr_land = 0;   // This can disable the aided sonarlanding, that could cause problems on trees
                 if (TiltValue < 0) DisArmCopter();                   // Copter is upside down in anglemode -> disarm the poor bustard
 
                 if (!sensors(SENSOR_GPS) && !sensors(SENSOR_BARO))   // No Sensors just go down
@@ -954,7 +980,7 @@ void loop(void)
     if (sensors(SENSOR_SONAR))
     {
         Sonar_update();                                              // And update "SonarStatus"
-        if (cfg.sonar_debug == 1) debug[0] = sonarAlt;
+        if (cfg.snr_debug == 1) debug[0] = sonarAlt;
     }
 #endif
 
@@ -971,14 +997,16 @@ void loop(void)
         getEstimatedAltitude();
     }
 
-//#define AutolandRate 64                                            // 40cm/sec (64/8*5)
-#define HoverTimeBeforeLand 2000000                                  // Wait 2 sec in the air for VirtualThrottle to catch up
-#define HasLandedTimeCheck 2000000                                   // Timeperiod for idlethrottle before shut off
+//#define al_barolr 64                                                // 40cm/sec (64/8*5)
+#define HoverTimeBeforeLand     2000000                               // Wait 2 sec in the air for VirtualThrottle to catch up
+#define HasLandedTimeCheckBaro  2000000                               // Timeperiod for idlethrottle before shut off
+#define HasLandedTimeCheckSonar 1000000                               // Timeperiod for idlethrottle before shut off - faster with Sonar
     if (sensors(SENSOR_BARO) && f.BARO_MODE && f.ARMED)
     {
         switch (AutolandState)
         {
         case 0:                                                      // No Autoland Do nothing
+            SnrLandThrlimiter = 0;                                   // Reset it here!
             break;
         case 1:                                                      // Start Althold
             rcData[THROTTLE] = cfg.midrc;                            // Put throttlestick to middle
@@ -990,14 +1018,30 @@ void loop(void)
             if (currentTime > AutolandGeneralTimer) AutolandState++;
             break;
         case 3:                                                      // Start descent initialize Variables
-            rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.autolandrate;
+            if (sensors(SENSOR_SONAR) && SonarStatus == 2 && GroundAltInitialized) // Set al_snrlr on steady sonar contact
+                rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.al_snrlr;
+            else
+                rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.al_barolr;
             AutolandGeneralTimer = 0;
             AutolandState++;
             break;
         case 4:                                                      // Check for landing
-            rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.autolandrate;
-            if (LastAltThrottle == cfg.minthrottle && AutolandGeneralTimer == 0 ) AutolandGeneralTimer = currentTime + HasLandedTimeCheck;
-            if (LastAltThrottle > cfg.minthrottle) AutolandGeneralTimer = 0; // Reset Timer
+            rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.al_barolr;
+            if (sensors(SENSOR_SONAR))                               // Adjust Landing
+            {
+                if (SonarStatus == 2 && GroundAltInitialized)        // User wants different Landrate on Solid Sonarcontact
+                    rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.al_snrlr;
+                if (cfg.snr_land == 1 && SonarBreach == 1 && SnrLandThrlimiter == 0) // Sonarlanding if SonarBreach = 1 (Proximity breach) fix the upper throttlevalue
+                    SnrLandThrlimiter = LastAltThrottle;
+            }
+            if (LastAltThrottle <= LandDetectMinThr && AutolandGeneralTimer == 0) // LandDetectMinThr is set upon Baro initialization in sensors/sensorsAutodetect
+            {
+                if (SnrLandThrlimiter == 0)
+                    AutolandGeneralTimer = currentTime + HasLandedTimeCheckBaro;  // No Sonar limiter, do the normal timeout
+                else
+                    AutolandGeneralTimer = currentTime + HasLandedTimeCheckSonar; // Sonar limiter, do shorter timeout
+            }
+            if (LastAltThrottle > LandDetectMinThr) AutolandGeneralTimer = 0;     // Reset Timer
             if (AutolandGeneralTimer != 0 && currentTime > AutolandGeneralTimer) AutolandState++;
             if (TiltValue < 0)  AutolandState++;                     // Proceed to disarm if copter upside down
             break;
@@ -1038,7 +1082,15 @@ void loop(void)
         }                                                                                                                     // End of X Hz Loop
         AltHold = AltHold8 >> 3;                                                                                              // Althold8 is remanent from my mwii project, will be replaced
         if (AutolandState != 0) BaroD = 0;                                                                                    // Don't do Throttle angle correction when autolanding
-        rcCommand[THROTTLE] = constrain(initialThrottleHold + BaroP + BaroD - BaroI,cfg.minthrottle,cfg.maxthrottle);
+        if (AutolandState != 0 && SnrLandThrlimiter != 0)
+        {
+            if (LastAltThrottle < SnrLandThrlimiter)                                                                          // Reduce Throttlelimit if possible
+                SnrLandThrlimiter = LastAltThrottle;
+            rcCommand[THROTTLE] = constrain(initialThrottleHold + BaroP + BaroD - BaroI, cfg.minthrottle, SnrLandThrlimiter); // We are autolanding and Limiter is set
+        }
+        else
+            rcCommand[THROTTLE] = constrain(initialThrottleHold + BaroP + BaroD - BaroI, cfg.minthrottle, cfg.maxthrottle);
+
         LastAltThrottle = rcCommand[THROTTLE];
     }
 #endif
@@ -1093,14 +1145,6 @@ void loop(void)
                 GPS_angle[ROLL]  = (nav[LON] * CosYawxPhase - nav[LAT] * SinYawyPhase) / 10;
                 GPS_angle[PITCH] = (nav[LON] * SinYawyPhase + nav[LAT] * CosYawxPhase) / 10;
             }
-
-//	DANGEROUS STUFF REMOVED FOR NOW
-//								if (nav_mode == NAV_MODE_POSHOLD && cfg.gps_phmove_speed != 0){       // Center sticks, give us into the faith of GPS - very dangerous right now...
-//						        rcCommand[ROLL] = rcCommand[PITCH] = 0;
-//							      rcData[ROLL]    = rcData[PITCH]    = cfg.midrc;
-//						    }
-//	DANGEROUS STUFF REMOVED FOR NOW
-
         }
     }
 

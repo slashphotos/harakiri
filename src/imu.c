@@ -363,14 +363,14 @@ void getEstimatedAltitude(void)
            }
        }
     }
-    
+
     if (sensors(SENSOR_SONAR) && SonarStatus !=0 && GroundAltInitialized) // Only do sonar if available and everything is settled
     {
         if(SonarStatus == 1)                                     // First contact
             Sonarcorrector = EstAlt + GroundAlt - (int32_t)sonarAlt; // Calculate baro/sonar displacement on 1st contact
         else                                                     // SonarStatus must be 2 here "steady contact"
             if (newbaroalt!=0)                                   // We have steady sonar contact, but we need new barovals to CF them
-            BaroAlt = (float)(Sonarcorrector + (int32_t)sonarAlt) * cfg.baro_sonar_cf + (float)BaroAlt * (1 - cfg.baro_sonar_cf); // Set weight / make transition smoother
+            BaroAlt = (float)(Sonarcorrector + (int32_t)sonarAlt) * cfg.snr_cf + (float)BaroAlt * (1 - cfg.snr_cf); // Set weight / make transition smoother
     }
     else Sonarcorrector = 0;                                     // Obsolete, but i like my variables set to 0 if state unknown
 
@@ -394,7 +394,7 @@ void getEstimatedAltitude(void)
         BaroClimbRate = fltmp /(float)VarioTabsize;              // BaroClimbRate in cm/sec // + is up // 27ms * 37 = 999ms
         VelUP = VelUP * cfg.accz_vel_cf + BaroClimbRate * (1.0f - cfg.accz_vel_cf);
         accalt = accalt * cfg.accz_alt_cf + (float)EstAltBaro * (1.0f - cfg.accz_alt_cf);
-        if (cfg.nazedebug == 1)
+        if (cfg.baro_debug == 1)
         {
             debug[0] = EstAltBaro*10;
             debug[1] = accalt*10;

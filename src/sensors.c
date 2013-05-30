@@ -108,6 +108,7 @@ retry:
         }
     }
     else sensorsClear(SENSOR_BARO);
+    LandDetectMinThr = (uint16_t)(cfg.minthrottle + (((cfg.maxthrottle - cfg.minthrottle) / 100) * cfg.al_lndpercent));
 #endif
 
     GroundAltInitialized = false;                    // Now time to init things
@@ -178,11 +179,9 @@ static void alignSensors(uint8_t type, int16_t *data)
     int i;
     int16_t tmp[3];
 
-    // make a copy :(
-    tmp[0] = data[0];
+    tmp[0] = data[0];                                             // make a copy :(
     tmp[1] = data[1];
     tmp[2] = data[2];
-
     for (i = 0; i < 3; i++)
     {
         int8_t axis = cfg.align[type][i];
@@ -202,24 +201,20 @@ static void ACC_Common(void)
     {
         for (axis = 0; axis < 3; axis++)
         {
-            // Reset a[axis] at start of calibration
-            if (calibratingA == 400)
+            if (calibratingA == 400)                              // Reset a[axis] at start of calibration
                 a[axis] = 0;
-            // Sum up 400 readings
-            a[axis] += accADC[axis];
-            // Clear global variables for next reading
-            accADC[axis] = 0;
+            a[axis] += accADC[axis];                              // Sum up 400 readings
+            accADC[axis] = 0;                                     // Clear global variables for next reading
             cfg.accZero[axis] = 0;
         }
-        // Calculate average, shift Z down by acc_1G and store values in EEPROM at end of calibration
-        if (calibratingA == 1)
+        if (calibratingA == 1)                                    // Calculate average, shift Z down by acc_1G and store values in EEPROM at end of calibration
         {
             cfg.accZero[ROLL] = a[ROLL] / 400;
             cfg.accZero[PITCH] = a[PITCH] / 400;
-            cfg.accZero[YAW] = a[YAW] / 400 - acc_1G;       // for nunchuk 200=1G
+            cfg.accZero[YAW] = a[YAW] / 400 - acc_1G;             // for nunchuk 200=1G
             cfg.angleTrim[ROLL] = 0;
             cfg.angleTrim[PITCH] = 0;
-            writeParams(1);      // write accZero in EEPROM
+            writeParams(1);                                       // write accZero in EEPROM
         }
         calibratingA--;
     }
@@ -229,8 +224,8 @@ static void ACC_Common(void)
         static int32_t b[3];
         static int16_t accZero_saved[3] = { 0, 0, 0 };
         static int16_t angleTrim_saved[2] = { 0, 0 };
-        // Saving old zeropoints before measurement
-        if (InflightcalibratingA == 50)
+
+        if (InflightcalibratingA == 50)                           // Saving old zeropoints before measurement
         {
             accZero_saved[ROLL] = cfg.accZero[ROLL];
             accZero_saved[PITCH] = cfg.accZero[PITCH];
@@ -242,13 +237,10 @@ static void ACC_Common(void)
         {
             for (axis = 0; axis < 3; axis++)
             {
-                // Reset a[axis] at start of calibration
-                if (InflightcalibratingA == 50)
+                if (InflightcalibratingA == 50)                   // Reset a[axis] at start of calibration
                     b[axis] = 0;
-                // Sum up 50 readings
-                b[axis] += accADC[axis];
-                // Clear global variables for next reading
-                accADC[axis] = 0;
+                b[axis] += accADC[axis];                          // Sum up 50 readings
+                accADC[axis] = 0;                                 // Clear global variables for next reading
                 cfg.accZero[axis] = 0;
             }
             // all values are measured
@@ -256,9 +248,8 @@ static void ACC_Common(void)
             {
                 AccInflightCalibrationActive = 0;
                 AccInflightCalibrationMeasurementDone = 1;
-                toggleBeep = 2;      // buzzer for indicatiing the end of calibration
-                // recover saved values to maintain current flight behavior until new values are transferred
-                cfg.accZero[ROLL] = accZero_saved[ROLL];
+                toggleBeep = 2;                                   // buzzer for indicating the end of calibration
+                cfg.accZero[ROLL] = accZero_saved[ROLL];          // recover saved values to maintain current flight behavior until new values are transferred
                 cfg.accZero[PITCH] = accZero_saved[PITCH];
                 cfg.accZero[YAW] = accZero_saved[YAW];
                 cfg.angleTrim[ROLL] = angleTrim_saved[ROLL];
@@ -267,15 +258,15 @@ static void ACC_Common(void)
             InflightcalibratingA--;
         }
         // Calculate average, shift Z down by acc_1G and store values in EEPROM at end of calibration
-        if (AccInflightCalibrationSavetoEEProm == 1)        // the copter is landed, disarmed and the combo has been done again
+        if (AccInflightCalibrationSavetoEEProm == 1)              // the copter is landed, disarmed and the combo has been done again
         {
             AccInflightCalibrationSavetoEEProm = 0;
             cfg.accZero[ROLL] = b[ROLL] / 50;
             cfg.accZero[PITCH] = b[PITCH] / 50;
-            cfg.accZero[YAW] = b[YAW] / 50 - acc_1G;    // for nunchuk 200=1G
+            cfg.accZero[YAW] = b[YAW] / 50 - acc_1G;              // for nunchuk 200=1G
             cfg.angleTrim[ROLL] = 0;
             cfg.angleTrim[PITCH] = 0;
-            writeParams(1);          // write accZero in EEPROM
+            writeParams(1);                                       // write accZero in EEPROM
         }
     }
 
@@ -287,8 +278,7 @@ static void ACC_Common(void)
 void ACC_getADC(void)
 {
     acc.read(accADC);
-    // if we have CUSTOM alignment configured, user is "assumed" to know what they're doing
-    if (cfg.align[ALIGN_ACCEL][0])
+    if (cfg.align[ALIGN_ACCEL][0])                                // if we have CUSTOM alignment configured, user is "assumed" to know what they're doing
         alignSensors(ALIGN_ACCEL, accADC);
     else
         acc.align(accADC);
@@ -299,11 +289,11 @@ void ACC_getADC(void)
 #ifdef BARO
 void Baro_update(void)
 {
-    static int32_t BaroSpikeTab[5];                                   // CRASHPILOT SPIKEFILTER Vars Start
+    static int32_t BaroSpikeTab[5];                               // CRASHPILOT SPIKEFILTER Vars Start
     int32_t extmp;
     uint8_t rdy;
     uint8_t sortidx;
-    uint8_t maxsortidx;                                               // CRASHPILOT SPIKEFILTER Vars End
+    uint8_t maxsortidx;                                           // CRASHPILOT SPIKEFILTER Vars End
     static uint32_t baroDeadline = 0;
     static uint32_t LastBaroTime;
     static uint8_t state = 0;
@@ -311,7 +301,7 @@ void Baro_update(void)
     uint32_t acttime;
     float PressureTMP;
 
-    newbaroalt = 0;                                                   // Reset Newbarovalue since it's iterative and not interrupt driven it's OK
+    newbaroalt = 0;                                               // Reset Newbarovalue since it's iterative and not interrupt driven it's OK
     if (micros() < baroDeadline) return;
     switch (state)
     {
@@ -461,7 +451,6 @@ void Gyro_getADC(void)
         alignSensors(ALIGN_GYRO, gyroADC);
     else
         gyro.align(gyroADC);
-
     GYRO_Common();
 }
 
@@ -470,7 +459,7 @@ void Sonar_init(void)                                                           
 {
     uint16_t utmp16;
     bool Inisuccess = false;
-    switch (cfg.SONAR_Pinout)
+    switch (cfg.snr_type)
     {
     case 0:
         Inisuccess = hcsr04_init(sonar_pwm56);
@@ -492,30 +481,30 @@ void Sonar_init(void)                                                           
     if (Inisuccess)
     {
         sensorsSet(SENSOR_SONAR);                                                     // Signalize Sonar available (esp with I2C Sonar), or PWM Pins initialized
-      
-        // Check for user configuration error. Set Errorlimit for Sonartype, Errorlimit should cover at least 0.5 sec
-        if (cfg.sonar_min == cfg.sonar_max)                                           // OMG User sets min = max
+        // Check for user configuration error.
+        if (cfg.snr_min == cfg.snr_max)                                               // OMG User sets min = max
         {
-            cfg.sonar_min = 50;                                                       // Use some safe values then
-            cfg.sonar_max = 100;
+            cfg.snr_min = 50;                                                         // Use some safe values then
+            cfg.snr_max = 100;
         }
-        if (cfg.sonar_min > cfg.sonar_max)                                            // OMG User mixed up min & max
+        if (cfg.snr_min > cfg.snr_max)                                                // OMG User mixed up min & max
         {
-            utmp16 = cfg.sonar_max;                                                   // Swap values
-            cfg.sonar_max = cfg.sonar_min;
-            cfg.sonar_min = utmp16;
+            utmp16 = cfg.snr_max;                                                     // Swap values
+            cfg.snr_max = cfg.snr_min;
+            cfg.snr_min = utmp16;
         }
-        if (cfg.SONAR_Pinout == 0 || cfg.SONAR_Pinout == 1)                           // Check for HC-SR04
+        if (cfg.snr_type == 0 || cfg.snr_type == 1)                                   // Check for HC-SR04
         {
-            if (cfg.sonar_min < 5)   cfg.sonar_min = 5;                               // Adjust sonar_min for HC-SR04
-            if (cfg.sonar_max > 400) cfg.sonar_max = 400;                             // Adjust sonar_max for HC-SR04
+            if (cfg.snr_min < 5)   cfg.snr_min = 5;                                   // Adjust snr_min for HC-SR04
+            if (cfg.snr_max > 400) cfg.snr_max = 400;                                 // Adjust snr_max for HC-SR04
         }                                                                             // no "else" stuff here to make it easily expandable
-        if (cfg.SONAR_Pinout == 3 || cfg.SONAR_Pinout == 4)                           // Check for Maxbotics
+        if (cfg.snr_type == 3 || cfg.snr_type == 4)                                   // Check for Maxbotics
         {
-            if (cfg.sonar_min < 25)  cfg.sonar_min = 25;                              // Adjust sonar_min for Maxbotics
-            if (cfg.sonar_max > 700) cfg.sonar_max = 700;                             // Adjust sonar_max for Maxbotics Note: some might do >10m! we limit it here
+            if (cfg.snr_min < 25)  cfg.snr_min = 25;                                  // Adjust snr_min for Maxbotics
+            if (cfg.snr_max > 700) cfg.snr_max = 700;                                 // Adjust snr_max for Maxbotics Note: some might do >10m! we limit it here
         }
         sonarAlt = -1;                                                                // Initialize with errorvalue
+        SonarStatus = 0;
     }
 }
 
@@ -528,8 +517,9 @@ void Sonar_update(void)
     bool    newdata = false;
     uint8_t tilt;
     uint8_t LastStatus = SonarStatus;                                                 // Save Last Status here for comparison
-
-    switch (cfg.SONAR_Pinout)                                                         // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
+    int16_t LastSonarAlt = sonarAlt;                                                  // Save Last Alt here for comparison
+  
+    switch (cfg.snr_type)                                                             // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
     {
     case 0:                                                                           // sonar_pwm56 HC-SR04
     case 1:                                                                           // sonar_rc78  HC-SR04
@@ -544,17 +534,26 @@ void Sonar_update(void)
         break;
     }
 
-    if (newdata)
+    if (newdata)                                                                      // 100 ms with Maxbotix, 60ms with HC-SR04
     {
-        tilt = 100 - constrain(TiltValue * 100.0f,0,100);                             // We don't care for upsidedownstuff, because althold is disabled than anyway
-        if (cfg.sonar_debug == 1) debug[1] = tilt;                                    // Prints out Tiltangle, but actually not degrees, 90 Degrees will be 100
-        if (sonarAlt > cfg.sonar_min && sonarAlt < cfg.sonar_max && tilt < cfg.sonar_tilt)
+        tilt = 100 - constrain(TiltValue * 100.0f, 0, 100.0f);                        // We don't care for upsidedownstuff, because althold is disabled than anyway
+        if (cfg.snr_debug == 1) debug[1] = tilt;                                      // Prints out Tiltangle, but actually not degrees, 90 Degrees will be 100
+        if (sonarAlt >= cfg.snr_min && sonarAlt <= cfg.snr_max && tilt < cfg.snr_tilt)
         {
             LastGoodSonarAlt = sonarAlt;
             Errorcnt = 0;
+            SonarBreach = 0;                                                          // 0 = Breach unknown, 1 = breached lower limit, 2 = breached upper limit (not used)
         }
         else
         {                                                                             // So sonarvalues are not sane here
+            if (tilt < cfg.snr_tilt)                                                  // Determine Limit breach type independent of tilt
+            {
+                if (sonarAlt != -1 && sonarAlt <= cfg.snr_min)
+                    SonarBreach = 1;                                                  // We breached lower limit
+                if (sonarAlt != -1 && sonarAlt >= cfg.snr_max)
+                    SonarBreach = 2;                                                  // We breached upper limit (unused later but set)
+            }
+            else SonarBreach = 0;                                                     // 0 = Breach unknown, 1 = breached lower limit, 2 = breached upper limit (not used)
             Errorcnt++;                                                               // We overshoot here but np the ubyte is more than enough
             if (Errorcnt < SonarErrorLimit)
                 sonarAlt = LastGoodSonarAlt;                                          // Bridge error with last value, when it's -1 we take care later
@@ -564,7 +563,11 @@ void Sonar_update(void)
                 sonarAlt = -1;
             }
         }
-        
+
+        if (LastSonarAlt != -1 && sonarAlt != -1 && cfg.snr_diff != 0 
+            && abs(sonarAlt - LastSonarAlt) > cfg.snr_diff)                           // Too much Difference between reads?
+            sonarAlt = -1;
+
         if (sonarAlt == -1)                                                           // Handle error here separately
         {
             LastGoodSonarAlt = -1;

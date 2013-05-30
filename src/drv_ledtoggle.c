@@ -42,7 +42,7 @@ void ledToggleUpdate( bool activated )                      // Ignore when we're
         return;
     }
     ledDelay++;
-    if (ledDelay == cfg.LED_Toggle_Delay)
+    if (ledDelay == LED_Value_Delay)
     {
         ledDelay=0;
         uint8_t bit = (ledIndex++ >> 1) & 31;

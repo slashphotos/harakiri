@@ -97,8 +97,7 @@ static void      GPS_distance_cm_bearing(int32_t * lat1, int32_t * lon1, int32_t
 static void      GPS_calc_longitude_scaling();
 static void      GPS_calc_velocity(void);
 static void      GPS_calc_location_error(int32_t * target_lat, int32_t * target_lng, int32_t * gps_lat, int32_t * gps_lng);
-static void      GPS_calc_posholdCrashpilot(bool useabsolutepos);
-static void      GPS_calc_posholdAPM(void);
+static void      GPS_calc_posholdCrashpilot(bool overspeed);
 static void      GPS_calc_nav_rate(int16_t max_speed);
 static int16_t   GPS_calc_desired_speed(void);
 static bool      GPS_newFrame(char c);
@@ -106,12 +105,10 @@ static bool      GPS_NMEA_newFrame(char c);
 static bool      GPS_MTK_newFrame(uint8_t data);
 static bool      GPS_UBLOX_newFrame(uint8_t data);
 static bool      UBLOX_parse_gps(void);
-// static void      SpikefilterGPSOutput(bool reset);
 static void      gpsPrint(const char *str);
 float            wrap_18000(float error);
 static int32_t   wrap_36000(int32_t angle);
-static void      ProjectGPS(float time);                // Projects current GPS ahead current movement
-//static float     SpecialSQRT(float value);
+static void      ProjectGPStoWP(float time);// Projects WPGPS ahead current movement
 static float     get_P(float error, struct PID_PARAM_* pid);
 static float     get_I(float error, float* dt, struct PID_* pid, struct PID_PARAM_* pid_param);
 static float     get_D(float input, float* dt, struct PID_* pid, struct PID_PARAM_* pid_param);
@@ -128,17 +125,17 @@ static PID       navPID[2];
 // INS & Core Variables
 extern float     actual_speed[2], ACCDeltaTimeINS;
 static float     dTnav;                   // Delta Time in milliseconds for navigation computations, updated with every good GPS read
-static int32_t   Real_GPS_coord[2];
+//static int32_t   Real_GPS_coord[2];     // Moved to global
+static int16_t   RealAverageGPSSpeed[2];  // This is a moving average of a 5 values Buffer
+static uint16_t  RealAverageGPSTotalSpeed;// In cm/s will roll over beyond 2359,296 km/h ca. MACH 2
 static float     rate_error[2];           // The difference between the desired rate of travel and the actual rate of travel
-static float     error[2];                // updated after GPS read - 5-10hz
-static uint16_t  INSTotalSpeed;           // In cm/s will roll over beyond 2359,296 km/h ca. MACH 2
+static float     error[2];                // updated after GPS read - 5-10hz Error in cm from target
 static uint32_t  TimestampNewGPSdata;     // Crashpilot in micros
 static int16_t   maxbank100;              // Maximum GPS Tiltangle
-static float     filterspeed[2];          // Filtered speed
 
 // PH Variables
-static bool      PHcompletelySettled;
 static float     MinAngleFactor;
+static bool      PH1stRun;
 
 // NAVIGATION & Crosstrack Variables
 static int32_t   target_bearing;          // target_bearing is where we should be heading
@@ -155,25 +152,27 @@ static float     CosLatScaleLon;          // this is used to offset the shrinkin
 
 void GPS_alltime(void)
 {
-    float vel_forward_cms, vel_right_cms;
-    static uint32_t phmovetimer = 0;
-    uint32_t dist;
-    int32_t  dir;
-    int16_t  speed;
+    static uint32_t PosHoldBlindTimer = 0;
+    static uint32_t TooFastResetTimer = 0;
+    static bool     PHtoofast;
+    static bool     PSholdChange;
+    uint32_t        dist;
+    int32_t         dir;
+    int16_t         speed;
 
-    if (f.GPS_FIX && GPS_numSat >= 5)                                              // Do gps stuff with at least 5 Sats
+    if (f.GPS_FIX && GPS_numSat >= 5)                                          // Do gps stuff with at least 5 Sats
     {
         if (!f.ARMED) f.GPS_FIX_HOME = 0;
         if (!f.GPS_FIX_HOME && f.ARMED) GPS_reset_home_position();
-        dTnav = ACCDeltaTimeINS;                                                   // Time in Secs (0.xxxx sec) from ACC read, that is important
+        dTnav = ACCDeltaTimeINS;                                               // Time in Secs (0.xxxx sec) from ACC read, that is important
         dTnav = min(dTnav, 1.0f);
-        GPS_calc_velocity();                                                       // Heart of the gps ins (and getEstimatedAttitude()), called every time
-        if (!f.GPS_FIX_HOME)                                                       // Do relative to home stuff for gui etc
+        GPS_calc_velocity();                                                   // Heart of the gps ins (and getEstimatedAttitude()), called every time
+        if (!f.GPS_FIX_HOME)                                                   // Do relative to home stuff for gui etc
         {
             GPS_distanceToHome = 0;
             GPS_directionToHome = 0;
         }
-        else
+        else                                                                   // Do dist to Home Stuff here
         {
             GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_home[LAT], &GPS_home[LON], &dist, &dir);
             GPS_distanceToHome = dist / 100;
@@ -185,49 +184,75 @@ void GPS_alltime(void)
             switch (nav_mode)
             {
             case NAV_MODE_POSHOLD:
-// Will be probably deleted just for testing
-                if (cfg.gps_phmove_speed != 0)                                 // Do PH MOVE SHIT
+                if (PH1stRun)
                 {
-                    PHcompletelySettled = true;                                // This is always true with phmove
-                    if (currentTime >= phmovetimer)                            // 10Hz Loop
+                    if (RealAverageGPSTotalSpeed > cfg.gps_ph_settlespeed)
+                        PHtoofast = true;
+                    else
+                        PHtoofast = false;
+                    PSholdChange  = false;
+                    PH1stRun      = false;
+                    TooFastResetTimer = 0;
+                    nav[LON] = 0;
+                    nav[LAT] = 0;
+                }
+
+                if (rcCommand[PITCH] != 0 || rcCommand[ROLL] != 0)             // Ph Override
+	              {
+                    PosHoldBlindTimer = 0;
+                    PSholdChange = true;
+                }
+                else                                                           // Sticks are center
+                {
+                    if (PSholdChange)                                          // Are we coming from a change? Stick back to neutral, set timer before accepting it
                     {
-                        phmovetimer  = currentTime + 100000;
-                        if (rcCommand[PITCH] !=0 || rcCommand[ROLL] !=0)
-                        {
-                            vel_forward_cms = (float)constrain(rcCommand[PITCH], -450, 450) * cfg.gps_phmove_speed;
-                            vel_right_cms   = (float)constrain(rcCommand[ROLL] , -450, 450) * cfg.gps_phmove_speed;
-                            GPS_WP[LON] += (vel_right_cms   * cos_yaw_x + vel_forward_cms * sin_yaw_y) * OneCmTo[LON];
-                            GPS_WP[LAT] += (vel_forward_cms * cos_yaw_x - vel_right_cms   * sin_yaw_y) * OneCmTo[LAT];
-                        }
+                        if (PosHoldBlindTimer == 0)                            // Timer not set?
+                            PosHoldBlindTimer = currentTime + 300000;          // Set 300ms timeout
+                        else                                                   // Timer running
+                            if (currentTime >= PosHoldBlindTimer)
+                            {
+                                PSholdChange = false;
+                                PH1stRun = true;                               // Ok we come from Override so pretend first run
+                            }
                     }
                 }
-// Will be probably deleted just for testing
 
-                if (cfg.gps_phmove_speed == 0)                                 // This is not done with "else" because the part above will probably be removed
+                if (!PH1stRun)                                                 // Skip this if we want to re - initialize after stick re - center
                 {
-                    if (RCDeadband(rcCommand[PITCH], cfg.phdeadband) !=0 || RCDeadband(rcCommand[ROLL], cfg.phdeadband) !=0)
+                    if (PHtoofast && RealAverageGPSTotalSpeed < cfg.gps_ph_settlespeed && TooFastResetTimer == 0)
+                        TooFastResetTimer = currentTime + 300000;              // Looking good, set 300ms timeout
+
+                    if (RealAverageGPSTotalSpeed > cfg.gps_ph_settlespeed)     // Reset Timer if speed exceeded limit during timeout
+                        TooFastResetTimer = 0;
+                
+                    if (PHtoofast && TooFastResetTimer != 0 && currentTime >= TooFastResetTimer)
                     {
-                        PHcompletelySettled = false;
-                        GPS_WP[LON]         = GPS_coord[LON];                  // To think about the original APM controller
-                        GPS_WP[LAT]         = GPS_coord[LAT];					         // To think about the original APM controller
+                        PHtoofast = false;                                     // We have settled
+                        ProjectGPStoWP(cfg.gps_lag);                           // Once we settled, project final PH Point based on current position, speed and GPS Lag
                     }
 
-                    if (!PHcompletelySettled && INSTotalSpeed < (uint16_t)cfg.gps_ph_settlespeed)
+                    if (PHtoofast)                                             // This is obsolete, i just do it in any case
                     {
-                        ProjectGPS(cfg.gps_lag);
-                        GPS_WP[LON] = GPS_coord[LON];
                         GPS_WP[LAT] = GPS_coord[LAT];
-                        PHcompletelySettled = true;
+                        GPS_WP[LON] = GPS_coord[LON];
                     }
-                }
 
-                GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
-                if (cfg.gps_ph_apm == 0) GPS_calc_posholdCrashpilot(PHcompletelySettled);   // Only use absolute Position if copter settled, otherwise do relative PH (just brake)
-                else GPS_calc_posholdAPM();
+                    GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);                
+
+                    if (PSholdChange)
+                        nav[LON] = nav[LAT] = 0;
+                    else
+                        GPS_calc_posholdCrashpilot(PHtoofast);                 // PHtoofast limits the over all tiltangle per axis and only does realtive PH
+                }
+                else
+                {
+                    nav[LON] = 0;
+                    nav[LAT] = 0;
+                }
                 break;
 
             case NAV_MODE_CIRCLE:
-                // *** DO SOME SERIOUS SHIT HERE
+                // *** DO SOME SERIOUS SHIT HERE LATER
                 //		GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_WP[LAT], &GPS_WP[LON], &wp_distance, &target_bearing);
                 //    GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
                 break;
@@ -251,16 +276,14 @@ void GPS_alltime(void)
                     if (cfg.nav_rtl_lastturn == 1 && nav_mode == NAV_MODE_RTL) magHold = nav_takeoff_bearing;  // rotates it's head to takeoff direction if wanted
                     nav_mode = NAV_MODE_POSHOLD;
                     wp_mode  = WP_STATUS_DONE;
-                    PHcompletelySettled = true;
+                    PH1stRun = true;
                 }
                 else wp_mode = WP_STATUS_NAVIGATING;
                 break;
-            }                                                                      // END Switch nav_mode
-
-//            if (cfg.nav_slew_rate == 0) SpikefilterGPSOutput(false);               // Do Spikefilter all the time when no slew rate wanted. Reset is "false"
-        }                                                                          // END of gps calcs i.e navigating
+            }                                                                  // END Switch nav_mode
+        }                                                                      // END of gps calcs i.e navigating
     }
-    else GPS_reset_nav();                                                          // END GPS_numSat >= 5
+    else GPS_reset_nav();                                                      // END GPS_numSat >= 5
 }
 
 void GPS_NewData(uint16_t c)              // Called by uart2Init interrupt
@@ -283,7 +306,7 @@ void GPS_NewData(uint16_t c)              // Called by uart2Init interrupt
         LonSpikeTab[4] = extmp;
         LonSpikeTab[0] = extmp;
         rdy = 0;
-        maxsortidx=4;
+        maxsortidx = 4;
         while(rdy == 0)
         {
             rdy = 1;
@@ -300,7 +323,7 @@ void GPS_NewData(uint16_t c)              // Called by uart2Init interrupt
             maxsortidx --;
         }
         rdy = 0;
-        maxsortidx=4;
+        maxsortidx = 4;
         while(rdy == 0)
         {
             rdy = 1;
@@ -341,12 +364,15 @@ void GPS_NewData(uint16_t c)              // Called by uart2Init interrupt
 // This is another important part of the gps ins
 static void GPS_calc_velocity(void)                                                 // actual_speed[GPS_Y] y_GPS_speed positve = Up (NORTH) // actual_speed[GPS_X] x_GPS_speed positve = Right (EAST)
 {
-    static int32_t  Last_Real_GPS_coord[2];
     static uint32_t LastTimestampNewGPSdata;
+    static int32_t  Last_Real_GPS_coord[2];
+    static int16_t  RealSpeedHistory[2][5];
     static float    GPSmovementAdder[2];
     static bool     INSusable;
+    static uint8_t  SpedLstPtr = 0;
     float           Real_GPS_speed[2];
-    float           gpsHz, tmp0;
+    float           gpsHz, tmp0, tmp1;
+    int32_t         sum[2];
     uint32_t        RealGPSDeltaTime;
     uint8_t         i;
 
@@ -371,43 +397,66 @@ static void GPS_calc_velocity(void)                                             
                 Last_Real_GPS_coord[i] = Real_GPS_coord[i];
                 actual_speed[i]        = actual_speed[i] * cfg.gps_ins_vel + Real_GPS_speed[i] * (1.0f - cfg.gps_ins_vel); // CF: GPS Correction
                 GPSmovementAdder[i]    = 0;                                         // This float accumulates the tiny acc movements between GPS reads
+                RealSpeedHistory[i][SpedLstPtr] = (int16_t)Real_GPS_speed[i];
             }
+            SpedLstPtr ++;
+            if (SpedLstPtr == 5) SpedLstPtr = 0;
+            sum[LAT] = 0;
+            sum[LON] = 0;
+            for (i = 0; i < 5; i++)
+            {
+                sum[LAT] += RealSpeedHistory[LAT][i];
+                sum[LON] += RealSpeedHistory[LON][i];
+            }
+            tmp0 = (float)sum[LAT] * 0.2f;                                          // / 5;
+            tmp1 = (float)sum[LON] * 0.2f;                                          // / 5;
+            RealAverageGPSSpeed[LAT] = (int16_t)tmp0;
+            RealAverageGPSSpeed[LON] = (int16_t)tmp1;
+            RealAverageGPSTotalSpeed = (uint16_t)sqrt(tmp0 * tmp0 + tmp1 * tmp1);   // This is better than GPS speed because we only want XY and not XYZ Speed
         }
     }                                                                               // End of X Hz Loop
+
     if ((millis() - TimestampNewGPSdata) > 500) INSusable = false;                  // INS is NOT OK, too long (500ms) no correction
+
     if (INSusable)
     {
         for (i = 0; i < 2; i++)
         {
-            filterspeed[i]       = filterspeed[i] * cfg.gps_speedfilter + actual_speed[i] * (1.0f - cfg.gps_speedfilter);
-            GPSmovementAdder[i] += actual_speed[i] * ACCDeltaTimeINS * OneCmTo[i];
-            GPS_coord[i]         = Real_GPS_coord[i] + GPSmovementAdder[i];
+            GPSmovementAdder[i] = GPSmovementAdder[i] + actual_speed[i] * ACCDeltaTimeINS * OneCmTo[i];
+            GPS_coord[i]        = Real_GPS_coord[i] + GPSmovementAdder[i];          // Bridge the time between GPS reads with acc data
         }
-        INSTotalSpeed = (uint16_t)sqrt(filterspeed[LAT] * filterspeed[LAT] + filterspeed[LON] * filterspeed[LON]); // This is better than GPS speed because we only want XY and not XYZ Speed
     }
     else
     {
         GPS_reset_nav();                                                            // Ins is fucked, reset stuff
-        INSTotalSpeed = 0;		                                                    	// Reset the Rest
+        RealAverageGPSTotalSpeed   = 0;		                                          // Reset the Rest
         for (i = 0; i < 2; i++)
         {
             GPS_coord[i]           = Real_GPS_coord[i];
             Last_Real_GPS_coord[i] = Real_GPS_coord[i];
-            filterspeed[i]         = 0;
             actual_speed[i]        = 0;
             GPSmovementAdder[i]    = 0;
-            INSTotalSpeed          = 0;
+            RealAverageGPSSpeed[i] = 0;
+        }
+        for (i = 0; i < 5; i++)
+        {
+            RealSpeedHistory[LAT][i] = 0;
+            RealSpeedHistory[LON][i] = 0;
         }
     }
-    debug[0] = filterspeed[0];
-    debug[1] = filterspeed[1];
-    debug[2] = INSTotalSpeed;
+    
+    if (cfg.gps_debug == 1) // Print Out some Debug values here
+    {
+        debug[0] = RealAverageGPSTotalSpeed;
+        debug[1] = RealAverageGPSSpeed[LAT]; 
+        debug[2] = RealAverageGPSSpeed[LON];
+    }    
 }
 
-static void ProjectGPS(float time)                                                  // Projects current GPS ahead current movement
+static void ProjectGPStoWP(float time)                                             // Projects current GPS ahead current movement (gathered over last second)
 {
     uint8_t i;
-    for (i = 0; i < 2; i++) GPS_coord[i] = Real_GPS_coord[i] + (int32_t)(filterspeed[i] * time * OneCmTo[i]);
+    for (i = 0; i < 2; i++) GPS_WP[i] = Real_GPS_coord[i] + (int32_t)((float)RealAverageGPSSpeed[i] * time * OneCmTo[i]);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -475,7 +524,7 @@ void GPS_set_next_wp(int32_t *lat, int32_t *lon)
     switch(nav_mode)
     {
     case NAV_MODE_POSHOLD:
-        PHcompletelySettled = false;
+        PH1stRun = true;
         break;
     case NAV_MODE_RTL:
         WP_Fastcorner = false;                                            // This means: Slow down when approaching WP
@@ -502,54 +551,35 @@ void GPS_set_next_wp(int32_t *lat, int32_t *lon)
 // VelEast;   // 1 // VelNorth;  // 0
 // 0 is NICK part  // 1 is ROLL part
 // actual_speed[GPS_Y] = VelNorth;
-static void GPS_calc_posholdCrashpilot(bool useabsolutepos)
+static void GPS_calc_posholdCrashpilot(bool overspeed)
 {
     uint8_t axis;
     float d, target_speed, maxbank100new, tmp0, tmp1;
-
+  
     for (axis = 0; axis < 2; axis++)
     {
-        if (filterspeed[axis] !=0 && !useabsolutepos)                              // Calculate tiltanglerestriction at overspeed based on totalspeed
+        if (actual_speed[axis] !=0 && overspeed)                                   // Calculate tiltanglerestriction at overspeed based on totalspeed
         {
-            tmp0 = (float)cfg.gps_ph_targetsqrt / filterspeed[axis];               // do something like sqrt(10/x) 10 is the unproblematic speed for max tiltangle
+            tmp0 = (float)cfg.gps_ph_targetsqrt / actual_speed[axis];              // do something like sqrt(10/x) 10 is the unproblematic speed for max tiltangle
             tmp1 = constrain(sqrtf(abs(tmp0)), MinAngleFactor, 1.0f);              // tmp1 contains now the factor for maximal angle
             maxbank100new = tmp1 * (float)maxbank100;
         }
         else maxbank100new = maxbank100;                                           // dont restrict further at 0 speed
 
-        if (useabsolutepos) target_speed = get_P(error[axis], &posholdPID_PARAM);  // Calculate Rate Error
-        else target_speed = 0;
-        rate_error[axis] = target_speed - filterspeed[axis];
+        if (overspeed)
+            target_speed = 0;                                                      // Relative PH on Overspeed
+        else
+            target_speed = get_P(error[axis], &posholdPID_PARAM);                  // Calculate Rate Error
+        
+        rate_error[axis] = target_speed - actual_speed[axis];
         rate_error[axis] = constrain(rate_error[axis], -1000, 1000);               // +- 10m/s
         nav[axis]        = get_P(rate_error[axis],                                 &poshold_ratePID_PARAM) +  //try negative for I? Because it just works like shit
                            get_I(rate_error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
         d = get_D(rate_error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
-        if (abs(filterspeed[axis]) < 50) d = 0;                                    // get rid of noise
+        if (abs(actual_speed[axis]) < 50) d = 0;                                   // get rid of noise
         else d = constrain(d, -2000, 2000);
         nav[axis]        = constrain(nav[axis] + d, -maxbank100new, maxbank100new);
-        navPID[axis].integrator = poshold_ratePID[axis].integrator;                // I kept it for compat.
-    }
-}
-
-static void GPS_calc_posholdAPM(void)
-{
-    float d;
-    float target_speed;
-    uint8_t axis;
-    for (axis = 0; axis < 2; axis++)
-    {
-        target_speed = get_P(error[axis], &posholdPID_PARAM);              // calculate desired speed from lon error
-//        rate_error[axis] = target_speed - actual_speed[axis];              // calc the speed error
-        rate_error[axis] = target_speed - filterspeed[axis];               // calc the speed error
-        nav[axis] = get_P(rate_error[axis], &poshold_ratePID_PARAM) +
-                    get_I(rate_error[axis] + error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
-        d = get_D(error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
-        d = constrain(d, -2000, 2000);
-        if (abs(filterspeed[axis]) < 50) d = 0;                            // get rid of noise
-//        if (abs(actual_speed[axis]) < 50) d = 0;                           // get rid of noise      
-        nav[axis] +=d;
-        nav[axis] = constrain(nav[axis], -maxbank100, maxbank100);
-        navPID[axis].integrator = poshold_ratePID[axis].integrator;
+        navPID[axis].integrator = poshold_ratePID[axis].integrator;                // "I" kept it for compat.
     }
 }
 
@@ -573,8 +603,7 @@ static void GPS_calc_nav_rate(int16_t max_speed)
     trig[GPS_Y] = sinf(temp);
     for (axis = 0; axis < 2; axis++)
     {
-        rate_error[axis] = (trig[axis] * (float)max_speed) - filterspeed[axis];
-//        rate_error[axis] = (trig[axis] * (float)max_speed) - actual_speed[axis];
+        rate_error[axis] = (trig[axis] * (float)max_speed) - actual_speed[axis];
         rate_error[axis] = constrain(rate_error[axis], -1000, 1000);
         nav[axis] = get_P(rate_error[axis],                        &navPID_PARAM) +  // P + I + D
                     get_I(rate_error[axis], &dTnav, &navPID[axis], &navPID_PARAM) +
@@ -702,20 +731,11 @@ void GPS_set_pids(void)                                               // Get the
     posholdPID_PARAM.kD   =	(float)cfg.D8[PIDPOS] / 1000.0f;          // Not used but initialized
     posholdPID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
 
-    if (cfg.gps_ph_apm == 0)
-    {
-        poshold_ratePID_PARAM.kP = (float)cfg.P8[PIDPOSR] /       5;  // Need more P
-        poshold_ratePID_PARAM.kI = (float)cfg.I8[PIDPOSR] / 1000.0f;  // "I" is evil, leads to circeling
-        poshold_ratePID_PARAM.kD = (float)cfg.D8[PIDPOSR] /  100.0f;  // Crashpilot needs bigger values, i think that is actually the real apm D scaling
-        poshold_ratePID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
-    }
-    else
-    {
-        poshold_ratePID_PARAM.kP = (float)cfg.P8[PIDPOSR] /   10.0f;  //  Original Scale
-        poshold_ratePID_PARAM.kI = (float)cfg.I8[PIDPOSR] /  100.0f;
-        poshold_ratePID_PARAM.kD = (float)cfg.D8[PIDPOSR] / 1000.0f;
-        poshold_ratePID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
-    }
+    poshold_ratePID_PARAM.kP = (float)cfg.P8[PIDPOSR] /       5;      // Need more P
+    poshold_ratePID_PARAM.kI = (float)cfg.I8[PIDPOSR] / 1000.0f;      // "I" is evil, leads to circeling
+    poshold_ratePID_PARAM.kD = (float)cfg.D8[PIDPOSR] /  100.0f;      // Crashpilot needs bigger values, i think that is actually the real apm D scaling
+    poshold_ratePID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
+ 
     navPID_PARAM.kP = (float)cfg.P8[PIDNAVR] / 10.0f;
     navPID_PARAM.kI = (float)cfg.I8[PIDNAVR] / 100.0f;
     navPID_PARAM.kD = (float)cfg.D8[PIDNAVR] / 1000.0f;
@@ -783,7 +803,6 @@ void GPS_reset_nav(void)                                              //reset na
     waypoint_speed_gov = (float)cfg.nav_speed_min;
     crosstrack_error = 0;
     WP_Fastcorner = false;
-//    SpikefilterGPSOutput(true);
 }
 
 bool DoingGPS(void)
@@ -823,14 +842,6 @@ static int32_t wrap_36000(int32_t angle)
     while (angle > 36000) angle -= 36000;
     while (angle <     0) angle += 36000;
     return angle;
-}
-
-int16_t RCDeadband(int16_t rcvalue, uint8_t rcdead)
-{
-    if (abs(rcvalue) < rcdead) rcvalue = 0;
-    else if (rcvalue > 0) rcvalue = rcvalue - (int16_t)rcdead;
-    else rcvalue = rcvalue + (int16_t)rcdead;
-    return rcvalue;
 }
 
 #define DIGIT_TO_VAL(_x)    (_x - '0')                            // This code is used for parsing NMEA data
@@ -1376,68 +1387,62 @@ bool UBLOX_parse_gps(void)
 }
 
 /*
-
-////////////////////////////////////////////////////////////////////////////////////
-// Crashpilot Spikefilter the GPS Output so a higher slewrate is possible, spikefilter produces minimal lag if any
-void SpikefilterGPSOutput(bool reset)
+int16_t RCDeadband(int16_t rcvalue, uint8_t rcdead)
 {
-    static float nav0[5];
-    static float nav1[5];
-    float        extmp;
-    uint8_t      i;
-
-    if (reset) for (i = 0; i < 5; i++) nav0[i] = nav1[i] = 0;
-    else
-    {
-        uint8_t  rdy,sortidx,maxsortidx;
-        extmp =  nav[0];
-        nav0[4] = extmp;
-        nav0[0] = extmp;
-        extmp =  nav[1];
-        nav1[4] = extmp;
-        nav1[0] = extmp;
-        rdy = 0;
-        maxsortidx=4;
-        while(rdy == 0)
-        {
-            rdy = 1;
-            for (sortidx = 0; sortidx<maxsortidx; sortidx++)
-            {
-                extmp = nav0[sortidx];
-                if (extmp > nav0[sortidx+1])
-                {
-                    nav0[sortidx] = nav0[sortidx+1];
-                    nav0[sortidx+1] = extmp;
-                    rdy = 0;
-                }
-            }
-            maxsortidx --;
-        }
-        rdy = 0;
-        maxsortidx=4;
-        while(rdy == 0)
-        {
-            rdy = 1;
-            for (sortidx = 0; sortidx<maxsortidx; sortidx++)
-            {
-                extmp = nav1[sortidx];
-                if (extmp > nav1[sortidx+1])
-                {
-                    nav1[sortidx] = nav1[sortidx+1];
-                    nav1[sortidx+1] = extmp;
-                    rdy = 0;
-                }
-            }
-            maxsortidx --;
-        }
-        nav[0] = nav0[2];
-        nav[1] = nav1[2];
-    }
+    if (abs(rcvalue) < rcdead) rcvalue = 0;
+    else if (rcvalue > 0) rcvalue = rcvalue - (int16_t)rcdead;
+    else rcvalue = rcvalue + (int16_t)rcdead;
+    return rcvalue;
 }
 
+// Will be probably deleted just for testing
+    float           vel_forward_cms, vel_right_cms;
+                if (cfg.gps_phmove_speed != 0)                                 // Do PH MOVE SHIT
+                {
+                    PHcompletelySettled = true;                                // This is always true with phmove
+                    if (currentTime >= phmovetimer)                            // 10Hz Loop
+                    {
+                        phmovetimer  = currentTime + 100000;
+                        if (rcCommand[PITCH] !=0 || rcCommand[ROLL] !=0)
+                        {
+                            vel_forward_cms = (float)constrain(rcCommand[PITCH], -450, 450) * cfg.gps_phmove_speed;
+                            vel_right_cms   = (float)constrain(rcCommand[ROLL] , -450, 450) * cfg.gps_phmove_speed;
+                            GPS_WP[LON] += (vel_right_cms   * cos_yaw_x + vel_forward_cms * sin_yaw_y) * OneCmTo[LON];
+                            GPS_WP[LAT] += (vel_forward_cms * cos_yaw_x - vel_right_cms   * sin_yaw_y) * OneCmTo[LAT];
+                        }
+                    }
+                }
+// Will be probably deleted just for testing
 ////////////////////////////////////////////////////////////////////////////////////
 // *** DIFFERENT STUFF THAT WORKED AS WELL *** POOL OF CODE THAT MIGHT BECOME USEFUL
 ////////////////////////////////////////////////////////////////////////////////////
+   else
+    {
+        poshold_ratePID_PARAM.kP = (float)cfg.P8[PIDPOSR] /   10.0f;  //  Original Scale
+        poshold_ratePID_PARAM.kI = (float)cfg.I8[PIDPOSR] /  100.0f;
+        poshold_ratePID_PARAM.kD = (float)cfg.D8[PIDPOSR] / 1000.0f;
+        poshold_ratePID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
+    }
+
+static void GPS_calc_posholdAPM(void)
+{
+    float d;
+    float target_speed;
+    uint8_t axis;
+    for (axis = 0; axis < 2; axis++)
+    {
+        target_speed = get_P(error[axis], &posholdPID_PARAM);              // calculate desired speed from lon error
+        rate_error[axis] = target_speed - actual_speed[axis];              // calc the speed error
+        nav[axis] = get_P(rate_error[axis], &poshold_ratePID_PARAM) +
+                    get_I(rate_error[axis] + error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
+        d = get_D(error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
+        d = constrain(d, -2000, 2000);
+        if (abs(actual_speed[axis]) < 50) d = 0;                           // get rid of noise
+        nav[axis] +=d;
+        nav[axis] = constrain(nav[axis], -maxbank100, maxbank100);
+        navPID[axis].integrator = poshold_ratePID[axis].integrator;
+    }
+}
 
 GPS_coord[LAT]  = GPS_coord[LAT] + (int32_t)(InsPOS * (float)(Real_GPS_coord[LAT] - GPS_coord[LAT])); // These steps are historical, since gps_lag stuff
 GPS_coord[LON]  = GPS_coord[LON] + (int32_t)(InsPOS * (float)(Real_GPS_coord[LON] - GPS_coord[LON]));

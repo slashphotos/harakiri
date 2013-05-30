@@ -16,12 +16,12 @@ static void cliSave(char *cmdline);
 static void cliSet(char *cmdline);
 static void cliStatus(char *cmdline);
 static void cliVersion(char *cmdline);
+static void cliScanI2Cbus(char *cmdline);
 static void LCDinit(void);
 static void LCDoff(void);
 static void LCDclear(void);
 static void LCDline1(void);
 static void LCDline2(void);
-static void cliScanI2Cbus(char *cmdline);
 
 // from sensors.c
 extern uint8_t batteryCellCount;
@@ -87,9 +87,9 @@ const clicmd_t cmdTable[] =
     { "map", "mapping of rc channel order", cliMap },
     { "mixer", "mixer name or list", cliMixer },
     { "save", "save and reboot", cliSave },
-    { "scani2cbus", "scan for I2C devices", cliScanI2Cbus },
+//    { "scani2cbus", "scan for I2C devices", cliScanI2Cbus }, EDIT: Moved to clistatus
     { "set", "name=value or blank or * for list", cliSet },
-    { "status", "show system status", cliStatus },
+    { "status", "show system status & I2C devices", cliStatus },
     { "version", "", cliVersion },
 };
 #define CMD_COUNT (sizeof(cmdTable) / sizeof(cmdTable[0]))
@@ -119,7 +119,6 @@ const clivalue_t valueTable[] =
     { "deadband",                  VAR_UINT8,  &cfg.deadband,                    0,         32, 1 },
     { "yawdeadband",               VAR_UINT8,  &cfg.yawdeadband,                 0,        100, 1 },
     { "alt_hold_throttle_neutral", VAR_UINT8,  &cfg.alt_hold_throttle_neutral,   1,        20,  1 },
-    { "phdeadband",                VAR_UINT8,  &cfg.phdeadband,                  1,        200, 1 },
     { "midrc",                     VAR_UINT16, &cfg.midrc,                    1200,       1700, 1 },
     { "rc_rate",                   VAR_UINT8,  &cfg.rcRate8,                     0,        250, 1 },
     { "rc_expo",                   VAR_UINT8,  &cfg.rcExpo8,                     0,        100, 1 },
@@ -140,6 +139,7 @@ const clivalue_t valueTable[] =
     { "failsafe_throttle",         VAR_UINT16, &cfg.failsafe_throttle,        1000,       2000, 1 },
     { "failsafe_deadpilot",        VAR_UINT8,  &cfg.failsafe_deadpilot,          0,        250, 1 },
     { "failsafe_justph",           VAR_UINT8,  &cfg.failsafe_justph,             0,          1, 1 },
+    { "failsafe_ignoreSNR",        VAR_UINT8,  &cfg.failsafe_ignoreSNR,          0,          1, 1 },
     { "motor_pwm_rate",            VAR_UINT16, &cfg.motor_pwm_rate,             50,        498, 0 },
     { "servo_pwm_rate",            VAR_UINT16, &cfg.servo_pwm_rate,             50,        498, 0 },
     { "serial_baudrate",           VAR_UINT32, &cfg.serial_baudrate,          1200,     115200, 0 },
@@ -171,7 +171,9 @@ const clivalue_t valueTable[] =
     { "gimbal_roll_min",           VAR_UINT16, &cfg.gimbal_roll_min,           100,       3000, 0 },
     { "gimbal_roll_max",           VAR_UINT16, &cfg.gimbal_roll_max,           100,       3000, 0 },
     { "gimbal_roll_mid",           VAR_UINT16, &cfg.gimbal_roll_mid,           100,       3000, 0 },
-    { "autolandrate",              VAR_UINT8,  &cfg.autolandrate,               30,        200, 1 },
+    { "al_barolr",                 VAR_UINT8,  &cfg.al_barolr,                  30,        200, 1 },
+    { "al_snrlr",                  VAR_UINT8,  &cfg.al_snrlr,                   30,        200, 1 },
+    { "al_lndpercent",             VAR_UINT8,  &cfg.al_lndpercent,               0,         80, 1 },
     { "align_gyro_x",              VAR_INT8,   &cfg.align[ALIGN_GYRO][0],       -3,          3, 0 },
     { "align_gyro_y",              VAR_INT8,   &cfg.align[ALIGN_GYRO][1],       -3,          3, 0 },
     { "align_gyro_z",              VAR_INT8,   &cfg.align[ALIGN_GYRO][2],       -3,          3, 0 },
@@ -191,23 +193,20 @@ const clivalue_t valueTable[] =
     { "accz_vel_cf",               VAR_FLOAT,  &cfg.accz_vel_cf,                 0,          1, 1 },
     { "accz_alt_cf",               VAR_FLOAT,  &cfg.accz_alt_cf,                 0,          1, 1 },
     { "baro_lag",                  VAR_FLOAT,  &cfg.baro_lag,                    0,         10, 1 },
-    { "baro_sonar_cf",             VAR_FLOAT,  &cfg.baro_sonar_cf,               0,          1, 1 },
     { "barodownscale",             VAR_FLOAT,  &cfg.barodownscale,               0,          1, 1 },
-    { "nazedebug",                 VAR_UINT8,  &cfg.nazedebug,                   0,          5, 0 },
+    { "baro_debug",                VAR_UINT8,  &cfg.baro_debug,                  0,          1, 0 },
     { "moron_threshold",           VAR_UINT8,  &cfg.moron_threshold,             0,        128, 0 },
     { "mag_declination",           VAR_INT16,  &cfg.mag_declination,        -18000,      18000, 1 },
     { "mag_oldcalib",              VAR_UINT8,  &cfg.mag_oldcalib,                0,          1, 0 },
     { "gps_baudrate",              VAR_UINT32, &cfg.gps_baudrate,             1200,     115200, 0 },
+    { "gps_debug",                 VAR_UINT8,  &cfg.gps_debug,                   0,          1, 0 },    
     { "gps_type",                  VAR_UINT8,  &cfg.gps_type,                    0,          9, 0 },
     { "gps_ins_vel",               VAR_FLOAT,  &cfg.gps_ins_vel,                 0,          1, 1 },
     { "gps_lag",                   VAR_FLOAT,  &cfg.gps_lag,                     0,         20, 1 },
-    { "gps_speedfilter",           VAR_FLOAT,  &cfg.gps_speedfilter,             0,          1, 1 },
     { "gps_phase",                 VAR_FLOAT,  &cfg.gps_phase,                 -30,         30, 1 },
     { "gps_ph_minsat",             VAR_UINT8,  &cfg.gps_ph_minsat,               5,         10, 1 },
-    { "gps_ph_apm",                VAR_UINT8,  &cfg.gps_ph_apm,                  0,          1, 1 },
     { "gps_ph_settlespeed",        VAR_UINT16, &cfg.gps_ph_settlespeed,          0,       1000, 1 },
     { "gps_ph_targetsqrt",         VAR_UINT16, &cfg.gps_ph_targetsqrt,           1,      60000, 1 },
-    { "gps_phmove_speed",          VAR_FLOAT,  &cfg.gps_phmove_speed,            0,        100, 1 },
     { "gps_maxangle",              VAR_UINT8,  &cfg.gps_maxangle,               10,         45, 1 },
     { "gps_minanglepercent",       VAR_UINT8,  &cfg.gps_minanglepercent,         1,        100, 1 },
     { "gps_wp_radius",             VAR_UINT16, &cfg.gps_wp_radius,               0,       2000, 1 },
@@ -230,7 +229,7 @@ const clivalue_t valueTable[] =
     { "gps_nav_p",                 VAR_UINT8,  &cfg.P8[PIDNAVR],                 0,        200, 1 },
     { "gps_nav_i",                 VAR_UINT8,  &cfg.I8[PIDNAVR],                 0,        200, 1 },
     { "gps_nav_d",                 VAR_UINT8,  &cfg.D8[PIDNAVR],                 0,        200, 1 },
-    { "led_invert",                VAR_UINT8,  &cfg.led_invert,                  0,          1, 0 },
+    { "LED_invert",                VAR_UINT8,  &cfg.LED_invert,                  0,          1, 0 },
     { "looptime",                  VAR_UINT16, &cfg.looptime,                    0,       9000, 1 },
     { "oldcontroller",             VAR_UINT8,  &cfg.oldcontroller,               0,          1, 1 },
     { "p_pitch",                   VAR_UINT8,  &cfg.P8[PITCH],                   0,        200, 1 },
@@ -249,16 +248,21 @@ const clivalue_t valueTable[] =
     { "i_level",                   VAR_UINT8,  &cfg.I8[PIDLEVEL],                0,        200, 1 },
     { "d_level",                   VAR_UINT8,  &cfg.D8[PIDLEVEL],                0,        200, 1 },
     { "auxChannels",               VAR_UINT8,  &cfg.auxChannels,                 4,         14, 0 },
-    { "SONAR_Pinout",              VAR_UINT8,  &cfg.SONAR_Pinout,                0,          4, 0 },
-    { "sonar_min",                 VAR_UINT8,  &cfg.sonar_min,                   0,        200, 1 },
-    { "sonar_max",                 VAR_UINT16, &cfg.sonar_max,                  50,        800, 1 },
-    { "sonar_debug",               VAR_UINT8,  &cfg.sonar_debug,                 0,          1, 1 },
-    { "sonar_tilt",                VAR_UINT8,  &cfg.sonar_tilt,                 10,         50, 1 },    
+    { "snr_type",                  VAR_UINT8,  &cfg.snr_type,                    0,          4, 0 },
+    { "snr_min",                   VAR_UINT8,  &cfg.snr_min,                     0,        200, 1 },
+    { "snr_max",                   VAR_UINT16, &cfg.snr_max,                    50,        800, 1 },
+    { "snr_debug",                 VAR_UINT8,  &cfg.snr_debug,                   0,          1, 0 },
+    { "snr_tilt",                  VAR_UINT8,  &cfg.snr_tilt,                   10,         50, 1 },
+    { "snr_cf",                    VAR_FLOAT,  &cfg.snr_cf,                      0,          1, 1 },
+    { "snr_diff",                  VAR_UINT8,  &cfg.snr_diff,                    0,        200, 1 },
+    { "snr_land",                  VAR_UINT8,  &cfg.snr_land,                    0,          1, 1 },    
     { "LED_Type",                  VAR_UINT8,  &cfg.LED_Type,                    0,          3, 0 },
     { "LED_pinout",                VAR_UINT8,  &cfg.LED_Pinout,                  0,          1, 0 },
     { "LED_ControlChannel",        VAR_UINT8,  &cfg.LED_ControlChannel,          1,         12, 0 }, // Aux Channel to controll the LED Pattern
     { "LED_ARMED",                 VAR_UINT8,  &cfg.LED_Armed,                   0,          1, 1 }, // 0 = Show LED only if armed, 1 = always show LED
-    { "LED_Toggle_Delay",          VAR_UINT16, &cfg.LED_Toggle_Delay,            0,      65535, 0 },
+    { "LED_Toggle_Delay1",         VAR_UINT8, &cfg.LED_Toggle_Delay1,            0,        255, 0 },
+    { "LED_Toggle_Delay2",         VAR_UINT8, &cfg.LED_Toggle_Delay2,            0,        255, 0 },
+    { "LED_Toggle_Delay3",         VAR_UINT8, &cfg.LED_Toggle_Delay3,            0,        255, 0 },
     { "LED_Pattern1",              VAR_UINT32, &cfg.LED_Pattern1,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 1
     { "LED_Pattern2",              VAR_UINT32, &cfg.LED_Pattern2,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 2
     { "LED_Pattern3",              VAR_UINT32, &cfg.LED_Pattern3,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 3};
@@ -539,7 +543,7 @@ static void cliCMix(char *cmdline)
         {
             if (cfg.customMixer[i].throttle == 0.0f)
                 break;
-            mixsum[i] = 0.0f;
+//  Ugly error here found by meister:          mixsum[i] = 0.0f;
             num_motors++;
             printf("#%d:\t", i + 1);
             printf("%s\t", ftoa(cfg.customMixer[i].throttle, buf));
@@ -547,6 +551,8 @@ static void cliCMix(char *cmdline)
             printf("%s\t", ftoa(cfg.customMixer[i].pitch, buf));
             printf("%s\r\n", ftoa(cfg.customMixer[i].yaw, buf));
         }
+        for (i = 0; i < 3; i++)                                           // Fix by meister
+            mixsum[i] = 0.0f;
         for (i = 0; i < num_motors; i++)
         {
             mixsum[0] += cfg.customMixer[i].roll;
@@ -979,9 +985,11 @@ static void cliStatus(char *cmdline)
 {
     uint8_t i;
     uint32_t mask;
-
+    char dummy;
+    uartPrint("\r\n");
     printf("System Uptime: %d seconds, Voltage: %d * 0.1V (%dS battery)\r\n",
            millis() / 1000, vbat, batteryCellCount);
+    uartPrint("\r\n");  
     mask = sensorsMask();
 
     printf("CPU %dMHz, detected sensors: ", (SystemCoreClock / 1000000));
@@ -995,8 +1003,12 @@ static void cliStatus(char *cmdline)
     if (sensors(SENSOR_ACC))
         printf("ACCHW: %s", accNames[accHardware]);
     uartPrint("\r\n");
-
+    uartPrint("\r\n");
     printf("Cycle Time: %d, I2C Errors: %d\r\n", cycleTime, i2cGetErrorCounter());
+    uartPrint("\r\n");
+    printf("Config Size: %d Bytes\r\n",cfg.size);
+    uartPrint("\r\n");
+    cliScanI2Cbus(&dummy);
 }
 
 static void cliVersion(char *cmdline)
@@ -1015,7 +1027,7 @@ void serialOSD(void)
 
     if (cliMode != 0) return;                                           // Don't do this if we are in cli mode
     LCDinit();
-    printf("Harakiri 10");
+    printf(FIRMWAREFORLCD);                                             // Defined in mw.h
     LCDline2();
     printf("LCD Interface");
     delay(2000);
@@ -1312,7 +1324,7 @@ void cliProcess(void)
             if (cmd)
                 cmd->func(cliBuffer + strlen(cmd->name) + 1);
             else
-                uartPrint("ERR: Unknown command, try 'help'");
+                uartPrint("ERR: That command was Harakiri, try 'help'");
 
             memset(cliBuffer, 0, sizeof(cliBuffer));
             bufferIndex = 0;
@@ -1369,7 +1381,8 @@ static void cliScanI2Cbus(char *cmdline)
   	uint8_t bufdaddy[2];                                // Dummy for DaddyW testread
     char    buf[20];
 
-    printf("Scanning I2C-Bus for devices ...\r\n");
+    printf("Scanning I2C-Bus for devices now.\r\n");
+    printf("=================================\r\n");
 
     nDevices = 0;
     for(address = 1; address < 127; address++ )
@@ -1450,6 +1463,7 @@ static void cliScanI2Cbus(char *cmdline)
         }
         delay(50);
     }
+    uartPrint("\r\n");
     if (nDevices == 0) printf("No I2C devices found\r\n");
     else printf("Done, %d Devices found\r\n",nDevices);
 }

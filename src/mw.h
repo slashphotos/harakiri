@@ -4,7 +4,8 @@
 #define VBATFREQ 6                          // to read battery voltage - nth number of loop iterations
 
 #define  VERSION  211
-#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10Beta G Godzilla " __DATE__ " / " __TIME__
+#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10 Mechagodzilla - last beta?" __DATE__ " / " __TIME__
+#define  FIRMWAREFORLCD "Harakiri 10"
 
 #define LAT  0
 #define LON  1
@@ -174,9 +175,8 @@ typedef struct config_t
     float    accz_vel_cf;                   // Crashpilot: Value for complementary filter accz and barovelocity
     float    accz_alt_cf;                   // Crashpilot: Value for complementary filter accz and altitude
     float    baro_lag;                      // Lag of Baro
-    float    baro_sonar_cf;                 // The bigger, the more Sonarinfluence
     float    barodownscale;                 // Scale downmovement down
-    uint8_t  nazedebug;                     // Crashpilot: 1 = Debug Barovalues
+    uint8_t  baro_debug;                    // Crashpilot: 1 = Debug Barovalues
     uint8_t  moron_threshold;               // people keep forgetting that moving model while init results in wrong gyro offsets. and then they never reset gyro. so this is now on by default.
 
     uint32_t activate[CHECKBOXITEMS];       // activate switches
@@ -191,7 +191,6 @@ typedef struct config_t
     uint8_t  deadband;                      // introduce a deadband around the stick center for pitch and roll axis. Must be greater than zero.
     uint8_t  yawdeadband;                   // introduce a deadband around the stick center for yaw axis. Must be greater than zero.
     uint8_t  alt_hold_throttle_neutral;     // defines the neutral zone of throttle stick during altitude hold, default setting is +/-20
-    uint8_t  phdeadband;                    // This Deadband adds to cfg.deadband
     uint8_t  spektrum_hires;                // spektrum high-resolution y/n (1024/2048bit)
     uint16_t midrc;                         // Some radios have not a neutral point centered on 1500. can be changed here
     uint16_t mincheck;                      // minimum rc end
@@ -205,6 +204,7 @@ typedef struct config_t
     uint16_t failsafe_throttle;             // Throttle level used for landing - specify value between 1000..2000 (pwm pulse width for slightly below hover). center throttle = 1500.
     uint8_t  failsafe_deadpilot;		        // Time in sec when FS is engaged after idle on THR/YAW/ROLL/PITCH
     uint8_t  failsafe_justph;               // Does just PH&Autoland an not RTL,
+    uint8_t  failsafe_ignoreSNR;            // When snr_land is set to 1, it is possible to ignore that on Failsafe, because FS over a tree could turn off copter
 
     // motor/esc/servo related stuff
     uint16_t minthrottle;                   // Set the minimum throttle command sent to the ESC (Electronic Speed Controller). This is the minimum value that allow motors to run at a idle speed.
@@ -246,23 +246,22 @@ typedef struct config_t
     uint16_t gimbal_roll_mid;               // gimbal roll servo neutral value
 
     // Autoland
-    uint8_t  autolandrate;                  // Temporary value "64" increase to increase Landingspeed
-
+    uint8_t  al_barolr;                     // Temporary value "64" increase to increase Landingspeed
+    uint8_t  al_snrlr;                      // You can specify different landingfactor here on sonar contact, because sonar land maybe too fast...
+    uint8_t  al_lndpercent;                 // (0-80%) Defines the Throttlepercentage when landing can be detected
     // gps-related stuff
     uint8_t  gps_type;                      // Type of GPS hardware. 0: NMEA 1: UBX 2+ ??
     float    gps_ins_vel;                   // Crashpilot: Value for complementary filter INS and GPS Velocity
     float    gps_lag;                       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind
-    float    gps_speedfilter;               // The higher the more filter
     float    gps_phase;                     // Make a phaseshift +-90 Deg max of GPS output
     uint8_t  acc_ins_lpf;                   // ACC lowpass for Acc GPS INS
     uint8_t  gps_ph_minsat;                 // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
-    uint8_t  gps_ph_apm;                    // If 1 the original APM PH Controller is used
-    uint16_t  gps_ph_settlespeed;           // PH settlespeed in cm/s
+    uint16_t gps_ph_settlespeed;            // PH settlespeed in cm/s
     uint16_t gps_ph_targetsqrt;             // This is the speed target of PH. That means if the copter moves faster than that, the maximal tiltangle reduced dramatically
-    float    gps_phmove_speed;              // DONT USE THIS FOR FLIGHT! PH move speed // 0 disables PH move - recommended!!
     uint8_t  gps_maxangle;                  // maximal over all GPS bank angle
     uint8_t  gps_minanglepercent;           // Percent 1-100% of gps_maxangle for minimal tilt, as lower limit for "gps_ph_targetsqrt"
     uint32_t gps_baudrate;                  // GPS baudrate
+    uint8_t  gps_debug;                     // Prints out the raw GPS values in GUI for testing
     uint16_t gps_wp_radius;                 // if we are within this distance to a waypoint then we consider it reached (distance is in cm)
     uint8_t  gps_rtl_mindist;               // Minimal distance for RTL, otherwise it will just autoland, prevent Failsafe jump in your face, when arming copter and turning off TX
     uint8_t  gps_rtl_flyaway;               // If during RTL the distance increases beyond this valus in meters, something is wrong, autoland
@@ -278,24 +277,27 @@ typedef struct config_t
     uint32_t serial_baudrate;               // serial(uart1) baudrate
 
     // LED Stuff
-    uint8_t  led_invert;                    // Crashpilot invert LED 0&1
-
+    uint8_t  LED_invert;                    // Crashpilot invert LED 0&1
     uint8_t  LED_Type;                      // 1=MWCRGB / 2=MONO_LED / 3=LEDRing
     uint8_t  LED_Pinout;                    // choose LED pinout (MONO_LED: 0=LED rc5, 1=LED rc6 / MWCRGB: coming soon)
     uint8_t  LED_ControlChannel;            // RC Channel to control the LED Pattern
     uint8_t  LED_Armed;          		        // 0 = Show LED only if armed, 1 = always show LED
-    uint16_t LED_Toggle_Delay;              // 16bit bit pattern to slow down led patterns
+    uint8_t  LED_Toggle_Delay1;             // 16bit bit pattern to slow down led patterns
+    uint8_t  LED_Toggle_Delay2;             // 16bit bit pattern to slow down led patterns
+    uint8_t  LED_Toggle_Delay3;             // 16bit bit pattern to slow down led patterns
     uint32_t LED_Pattern1;            	  	// 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
     uint32_t LED_Pattern2;            		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
     uint32_t LED_Pattern3;            		  // 32bit bit pattern to have flickering led patterns / the pattern for MWCRGB 1000-2000
 
     // Sonar Stuff
-    uint8_t  SONAR_Pinout;                  // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4=MBRC78
-    uint8_t  sonar_min;                     // Valid Sonar minimal range in cm (0-200)
-    uint16_t sonar_max;                     // Valid Sonar maximal range in cm (0-700)
-    uint8_t  sonar_debug;                   // 1 Sets Sonardata within sonar_min/max in debug[0]
-    uint8_t  sonar_tilt;                    // Somehow copter tiltrange in degrees (not exactly) in wich Sonar is possible
-
+    uint8_t  snr_type ;                     // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4=MBRC78
+    uint8_t  snr_min;                       // Valid Sonar minimal range in cm (0-200)
+    uint16_t snr_max;                       // Valid Sonar maximal range in cm (0-700)
+    uint8_t  snr_debug;                     // 1 Sets Sonardata within snr_min/max in debug[0]
+    uint8_t  snr_tilt;                      // Somehow copter tiltrange in degrees (not exactly) in wich Sonar is possible
+    float    snr_cf;                        // The bigger, the more Sonarinfluence
+    uint8_t  snr_diff;                      // Maximal allowed difference in cm between sonar readouts (100ms rate and maxdiff = 50 means max 5m/s)
+    uint8_t  snr_land;                      // This helps Sonar when landing, by setting upper throttle limit to current throttle. - Beware of Trees!!   
     motorMixer_t customMixer[MAX_MOTORS];   // custom mixtable
     uint8_t  magic_ef;                      // magic number, should be 0xEF
     uint8_t  chk;                           // XOR checksum
@@ -370,11 +372,14 @@ extern float    heading;
 extern float    magHold;
 extern float    magneticDeclination;
 
-// Sonar
+// SONAR /BARO /AUTOLAND
 extern uint8_t  SonarStatus;                // 0 = no contact, 1 = made contact, 2 = steady contact
+extern uint8_t  SonarBreach;                // 0 = Breach unknown, 1 = breached lower limit, 2 = breached upper limit (not used)
+extern uint16_t LandDetectMinThr;           // Is set upon Baro initialization
 
 // GPS stuff
 extern int32_t  GPS_coord[2];
+extern int32_t  Real_GPS_coord[2];          // Pure GPS Coords
 extern int32_t  GPS_home[2];
 extern int32_t  GPS_WP[2];                  // Currently used WP
 extern uint8_t  GPS_numSat;
@@ -405,6 +410,8 @@ extern baro_t   baro;
 
 // MWCRGB
 extern uint32_t LED_Value;
+extern uint32_t LED_Value;
+extern uint8_t  LED_Value_Delay;
 
 // main
 void loop(void);
@@ -485,7 +492,6 @@ void GPS_set_next_wp(int32_t* lat, int32_t* lon);
 void GPS_alltime(void);
 bool DoingGPS(void);
 float wrap_18000(float);
-int16_t RCDeadband(int16_t rcvalue, uint8_t rcdead);
 
 // telemetry
 void initTelemetry(bool State);
