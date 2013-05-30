@@ -150,29 +150,35 @@ static int16_t   crosstrack_error;        // The amount of angle correction appl
 static float     OneCmTo[2];              // Moves one cm in Gps coords
 static float     CosLatScaleLon;          // this is used to offset the shrinking longitude as we go towards the poles
 
+
+#define PhStickCenterTimeout  300000      // Defines the time in us when we consider the sticks really back to center
+#define PhSettleTimeout       300000      // Defines the time in us, where actual speed must be below settlespeed, to consider a settled copter
+#define PhForceSettleTimeout 4000000      // Over all Timeout for settling stuff, after 4 seconds a PH with absolute Position and full tiltangle is forced - god be with you
+
 void GPS_alltime(void)
 {
-    static uint32_t PosHoldBlindTimer = 0;
-    static uint32_t TooFastResetTimer = 0;
+    static uint32_t PosHoldBlindTimer  = 0;
+    static uint32_t TooFastResetTimer  = 0;
+    static uint32_t ForcePhSettleTimer = 0;
     static bool     PHtoofast;
     static bool     PSholdChange;
     uint32_t        dist;
     int32_t         dir;
     int16_t         speed;
 
-    if (f.GPS_FIX && GPS_numSat >= 5)                                          // Do gps stuff with at least 5 Sats
+    if (f.GPS_FIX && GPS_numSat >= 5)                                               // Do gps stuff with at least 5 Sats
     {
         if (!f.ARMED) f.GPS_FIX_HOME = 0;
         if (!f.GPS_FIX_HOME && f.ARMED) GPS_reset_home_position();
-        dTnav = ACCDeltaTimeINS;                                               // Time in Secs (0.xxxx sec) from ACC read, that is important
+        dTnav = ACCDeltaTimeINS;                                                    // Time in Secs (0.xxxx sec) from ACC read, that is important
         dTnav = min(dTnav, 1.0f);
-        GPS_calc_velocity();                                                   // Heart of the gps ins (and getEstimatedAttitude()), called every time
-        if (!f.GPS_FIX_HOME)                                                   // Do relative to home stuff for gui etc
+        GPS_calc_velocity();                                                        // Heart of the gps ins (and getEstimatedAttitude()), called every time
+        if (!f.GPS_FIX_HOME)                                                        // Do relative to home stuff for gui etc
         {
             GPS_distanceToHome = 0;
             GPS_directionToHome = 0;
         }
-        else                                                                   // Do dist to Home Stuff here
+        else                                                                        // Do dist to Home Stuff here
         {
             GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_home[LAT], &GPS_home[LON], &dist, &dir);
             GPS_distanceToHome = dist / 100;
@@ -187,68 +193,69 @@ void GPS_alltime(void)
                 if (PH1stRun)
                 {
                     if (RealAverageGPSTotalSpeed > cfg.gps_ph_settlespeed)
-                        PHtoofast = true;
+                        PHtoofast       = true;
                     else
-                        PHtoofast = false;
-                    PSholdChange  = false;
-                    PH1stRun      = false;
-                    TooFastResetTimer = 0;
-                    nav[LON] = 0;
-                    nav[LAT] = 0;
+                        PHtoofast       = false;
+
+                    PSholdChange        = false;
+                    PH1stRun            = false;
+                    TooFastResetTimer   = 0;
+                    ForcePhSettleTimer  = 0;
+                    nav[LON] = nav[LAT] = 0;
                 }
 
-                if (rcCommand[PITCH] != 0 || rcCommand[ROLL] != 0)             // Ph Override
+                if (rcCommand[PITCH] != 0 || rcCommand[ROLL] != 0)                  // Ph Override
 	              {
                     PosHoldBlindTimer = 0;
                     PSholdChange = true;
                 }
-                else                                                           // Sticks are center
+                else                                                                // Sticks are center
                 {
-                    if (PSholdChange)                                          // Are we coming from a change? Stick back to neutral, set timer before accepting it
+                    if (PSholdChange)                                               // Are we coming from a change? Stick back to neutral, set timer before accepting it
                     {
-                        if (PosHoldBlindTimer == 0)                            // Timer not set?
-                            PosHoldBlindTimer = currentTime + 300000;          // Set 300ms timeout
-                        else                                                   // Timer running
-                            if (currentTime >= PosHoldBlindTimer)
+                        if (PosHoldBlindTimer == 0)                                 // Timer not set?
+                            PosHoldBlindTimer = currentTime + PhStickCenterTimeout; // Set 300ms timeout
+                        else                                                        // Timer running
+                            if (currentTime >= PosHoldBlindTimer)                   // Override done?
                             {
-                                PSholdChange = false;
-                                PH1stRun = true;                               // Ok we come from Override so pretend first run
+                                PSholdChange       = false;                         // Ok we come from Override so pretend we are too fast
+                                PHtoofast          = true;                          // Force new braking and settling action in any case
+                                TooFastResetTimer  = 0;
+                                ForcePhSettleTimer = 0;
                             }
                     }
                 }
 
-                if (!PH1stRun)                                                 // Skip this if we want to re - initialize after stick re - center
+                if (PHtoofast)
                 {
-                    if (PHtoofast && RealAverageGPSTotalSpeed < cfg.gps_ph_settlespeed && TooFastResetTimer == 0)
-                        TooFastResetTimer = currentTime + 300000;              // Looking good, set 300ms timeout
+                    GPS_WP[LAT] = GPS_coord[LAT];                                   // This is obsolete, i just do it in any case, perhaps some one wants to use other ph controller
+                    GPS_WP[LON] = GPS_coord[LON];                                   // No projection stuff here on purpose
 
-                    if (RealAverageGPSTotalSpeed > cfg.gps_ph_settlespeed)     // Reset Timer if speed exceeded limit during timeout
+                    if (ForcePhSettleTimer  == 0)
+                        ForcePhSettleTimer = currentTime + PhForceSettleTimeout;    // Set 4sec timeout before brute force takes over
+
+                    if (RealAverageGPSTotalSpeed < cfg.gps_ph_settlespeed && TooFastResetTimer == 0)
+                        TooFastResetTimer = currentTime + PhSettleTimeout;          // Looking good, set 300ms timeout
+
+                    if (RealAverageGPSTotalSpeed > cfg.gps_ph_settlespeed)          // Reset Timer if speed exceeded limit during timeout
                         TooFastResetTimer = 0;
-                
-                    if (PHtoofast && TooFastResetTimer != 0 && currentTime >= TooFastResetTimer)
+
+                    if ( (TooFastResetTimer  != 0 && currentTime >= TooFastResetTimer) ||
+                         (ForcePhSettleTimer != 0 && currentTime >= ForcePhSettleTimer) )
                     {
-                        PHtoofast = false;                                     // We have settled
-                        ProjectGPStoWP(cfg.gps_lag);                           // Once we settled, project final PH Point based on current position, speed and GPS Lag
+                        TooFastResetTimer  = 0;
+                        ForcePhSettleTimer = 0;
+                        PHtoofast          = false;                                 // We have settled stop this shit
+                        ProjectGPStoWP(cfg.gps_lag);                                // Once we settled, project final PH Point based on current position, last speeds and GPS Lag
                     }
-
-                    if (PHtoofast)                                             // This is obsolete, i just do it in any case
-                    {
-                        GPS_WP[LAT] = GPS_coord[LAT];
-                        GPS_WP[LON] = GPS_coord[LON];
-                    }
-
-                    GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);                
-
-                    if (PSholdChange)
-                        nav[LON] = nav[LAT] = 0;
-                    else
-                        GPS_calc_posholdCrashpilot(PHtoofast);                 // PHtoofast limits the over all tiltangle per axis and only does realtive PH
                 }
+
+                GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);                
+
+                if (PSholdChange)                                                   // We want to override
+                    nav[LON] = nav[LAT] = 0;                                        // Take back the last commands
                 else
-                {
-                    nav[LON] = 0;
-                    nav[LAT] = 0;
-                }
+                    GPS_calc_posholdCrashpilot(PHtoofast);                          // PHtoofast limits the over all tiltangle per axis and only does realtive PH
                 break;
 
             case NAV_MODE_CIRCLE:
@@ -263,15 +270,15 @@ void GPS_alltime(void)
                 GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
 
                 speed = GPS_calc_desired_speed();
-                GPS_calc_nav_rate(speed);                                      // use error as the desired rate towards the target Desired output is in nav_lat and nav_lon where 1deg inclination is 100
+                GPS_calc_nav_rate(speed);                                           // use error as the desired rate towards the target Desired output is in nav_lat and nav_lon where 1deg inclination is 100
 
-                if (cfg.nav_controls_heading == 1 && wp_distance > 200)        // Tail control only update beyond 2 m
+                if (cfg.nav_controls_heading == 1 && wp_distance > 200)             // Tail control only update beyond 2 m
                 {
                     if (cfg.nav_tail_first == 1) magHold = wrap_18000(nav_bearing - 18000) / 100;
                     else magHold = nav_bearing / 100;
                 }
 
-                if ((wp_distance <= cfg.gps_wp_radius) || check_missed_wp())   // if yes switch to poshold mode
+                if ((wp_distance <= cfg.gps_wp_radius) || check_missed_wp())        // if yes switch to poshold mode
                 {
                     if (cfg.nav_rtl_lastturn == 1 && nav_mode == NAV_MODE_RTL) magHold = nav_takeoff_bearing;  // rotates it's head to takeoff direction if wanted
                     nav_mode = NAV_MODE_POSHOLD;
@@ -280,10 +287,10 @@ void GPS_alltime(void)
                 }
                 else wp_mode = WP_STATUS_NAVIGATING;
                 break;
-            }                                                                  // END Switch nav_mode
-        }                                                                      // END of gps calcs i.e navigating
+            }                                                                       // END Switch nav_mode
+        }                                                                           // END of gps calcs i.e navigating
     }
-    else GPS_reset_nav();                                                      // END GPS_numSat >= 5
+    else GPS_reset_nav();                                                           // END GPS_numSat >= 5
 }
 
 void GPS_NewData(uint16_t c)              // Called by uart2Init interrupt

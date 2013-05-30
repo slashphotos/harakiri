@@ -12,7 +12,8 @@ http://fpv-community.de/showthread.php?20988-I%B2C-Sonarplatinen
 Maxbotics Sonars using PWM readout (expensive stuff, probably some people have them from APM)
 
 ToDo?:
-SRF10 is I2C http://www.shop.robotikhardware.de/shop/catalog/product_info.php?products_id=121
+Other I2C Sonars: SRF02 SRF08 SRF10 SRC235 (all the same protocol)
+http://www.shop.robotikhardware.de/shop/catalog/product_info.php?products_id=121
 
 SOME INFO:
 

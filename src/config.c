@@ -229,7 +229,7 @@ static void resetConf(void)
 
     // Radio
     parseRcChannels("AETR1234");
-    cfg.deadband                  = 10;         // Crashpilot: A little deadband will not harm our crappy RC
+    cfg.deadband                  = 15;         // Crashpilot: A little deadband will not harm our crappy RC
     cfg.yawdeadband               = 15;         // Crashpilot: A little deadband will not harm our crappy RC
     cfg.alt_hold_throttle_neutral = 50;         // Crashpilot: A little deadband will not harm our crappy RC
 
@@ -288,9 +288,9 @@ static void resetConf(void)
     cfg.gps_lag                   = 1.0f;       // This is to overcome GPS LAG, currently just used to project GPS on PH - moving
     cfg.gps_phase                 = 0;          // Make a phaseshift +-90 Deg max of GPS output
     cfg.gps_ph_minsat             = 6;          // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
-    cfg.gps_ph_settlespeed        = 80;         // PH settlespeed in cm/s
-    cfg.gps_ph_targetsqrt         = 2;          // This is the speed target of PH. That means if the copter moves faster than that, the maximal tiltangle reduced dramatically. Just think of the value as a working point for the sqrt brake
-    cfg.gps_minanglepercent       = 15;         // Percent 1 - 100% of gps_maxangle for minimal tilt, as lower limit for "gps_ph_targetsqrt"
+    cfg.gps_ph_settlespeed        = 100;        // PH settlespeed in cm/s
+    cfg.gps_ph_targetsqrt         = 1;          // This is the speed target of PH. That means if the copter moves faster than that, the maximal tiltangle reduced dramatically. Just think of the value as a working point for the sqrt brake
+    cfg.gps_minanglepercent       = 40;         // Percent 1 - 100% of gps_maxangle for minimal tilt, as lower limit for "gps_ph_targetsqrt"
     cfg.gps_maxangle              = 25;         // maximal over all GPS bank angle
     cfg.gps_wp_radius             = 200;
     cfg.gps_rtl_minhight          = 20;         // (0-200) Minimal RTL hight in m, 0 disables feature
