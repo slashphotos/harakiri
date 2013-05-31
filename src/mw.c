@@ -970,7 +970,7 @@ void loop(void)
         if (rcOptions[BOXPASSTHRU]) f.PASSTHRU_MODE = 1;
         else f.PASSTHRU_MODE = 0;
 
-        if (cfg.mixerConfiguration == MULTITYPE_FLYING_WING || cfg.mixerConfiguration == MULTITYPE_AIRPLANE) f.HEADFREE_MODE = 0;
+        if (cfg.airplane) f.HEADFREE_MODE = 0;  // @Johannes
 
 // AT THE VERY END DO SOME KILLSWITCHSTUFF, IF NEEDED
 // If Copter is armed by box and a cfg.killswitchtime (in ms) is defined

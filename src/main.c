@@ -74,10 +74,20 @@ int main(void)
 
     NumberOfMotors = mixerInit();          // this will set useServo var depending on mixer type
     // when using airplane/wing mixer, servo/motor outputs are remapped
-    if (cfg.mixerConfiguration == MULTITYPE_AIRPLANE || cfg.mixerConfiguration == MULTITYPE_FLYING_WING)
-        pwm_params.airplane = true;
+    if (
+        cfg.mixerConfiguration == MULTITYPE_AIRPLANE || 
+        cfg.mixerConfiguration == MULTITYPE_FLYING_WING ||
+#ifdef DEFINED_FW_DRAG
+        cfg.mixerConfiguration == MULTITYPE_FW_DRAG ||
+#endif
+#ifdef DEFINED_TILTROTOR
+        cfg.mixerConfiguration == MULTITYPE_TILTROTOR
+#endif
+    )
+        cfg.airplane = true; // @Johannes
     else
-        pwm_params.airplane = false;
+        cfg.airplane = false; // @Johannes
+
     pwm_params.useUART = feature(FEATURE_GPS) || feature(FEATURE_SPEKTRUM); // spektrum support uses UART too
     pwm_params.usePPM = feature(FEATURE_PPM);
     pwm_params.enableInput = !feature(FEATURE_SPEKTRUM); // disable inputs if using spektrum
