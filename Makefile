@@ -98,6 +98,7 @@ STDPERIPH_SRC	 = $(notdir $(wildcard $(STDPERIPH_DIR)/src/*.c))
 
 # Tool names
 CC		 = arm-none-eabi-gcc
+SIZE		 = arm-none-eabi-size
 OBJCOPY		 = arm-none-eabi-objcopy
 
 #
@@ -162,6 +163,7 @@ $(TARGET_BIN): $(TARGET_ELF)
 
 $(TARGET_ELF):  $(TARGET_OBJS)
 	$(CC) -Wl,-Map=$@.map,--cref -o $@ $^ $(LDFLAGS)
+	$(SIZE) $@
 
 # Compile
 $(OBJECT_DIR)/$(TARGET)/%.o: %.c
