@@ -161,23 +161,24 @@ $(TARGET_BIN): $(TARGET_ELF)
 	$(OBJCOPY) -O binary $< $@
 
 $(TARGET_ELF):  $(TARGET_OBJS)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CC) -Wl,-Map=$@.map,--cref -o $@ $^ $(LDFLAGS)
 
 # Compile
 $(OBJECT_DIR)/$(TARGET)/%.o: %.c
 	@mkdir -p $(dir $@)
 	@echo %% $(notdir $<)
-	@$(CC) -c -o $@ $(CFLAGS) $<
+	$(CC) -c -o $@ $(CFLAGS) $<
 
 # Assemble
 $(OBJECT_DIR)/$(TARGET)/%.o: %.s
 	@mkdir -p $(dir $@)
 	@echo %% $(notdir $<)
-	@$(CC) -c -o $@ $(ASFLAGS) $< 
+	$(CC) -c -o $@ $(ASFLAGS) $< 
+
 $(OBJECT_DIR)/$(TARGET)/%.o): %.S
 	@mkdir -p $(dir $@)
 	@echo %% $(notdir $<)
-	@$(CC) -c -o $@ $(ASFLAGS) $< 
+	$(CC) -c -o $@ $(ASFLAGS) $< 
 
 clean:
 	rm -f $(TARGET_HEX) $(TARGET_BIN) $(TARGET_ELF) $(TARGET_OBJS)
