@@ -1,5 +1,5 @@
 #include "board.h"
-
+#include "mw.h"
 // HMC5883L, default address 0x1E
 // PB12 connected to MAG_DRDY on rev4 hardware
 
@@ -29,7 +29,7 @@ bool hmc5883lDetect(void)
     return true;
 }
 
-void hmc5883lInit(float *calibrationGain)
+void hmc5883lInit(float *calibrationGain)           // THE RESULT IS ALIGNED
 {
     GPIO_InitTypeDef GPIO_InitStructure;
     float magGain[3];
@@ -43,25 +43,23 @@ void hmc5883lInit(float *calibrationGain)
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
     GPIO_Init(GPIOB, &GPIO_InitStructure);
 
-    delay(50);
+    delay(100);
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFA, 0x010 + HMC_POS_BIAS);   // Reg A DOR = 0x010 + MS1, MS0 set to pos bias
     // Note that the  very first measurement after a gain change maintains the same gain as the previous setting.
     // The new gain setting is effective from the second measurement and on.
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFB, 2 << 5); // Set the Gain
     delay(100);
-    hmc5883lRead(magADC);
+    hmc5883lRead(magADC);                           // read one dataset and discard it!
 
     for (i = 0; i < 10; i++)                        // Collect 10 samples
     {
         i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE, 1);
-        delay(50);
+        delay(100);
         hmc5883lRead(magADC);                       // Get the raw values in case the scales have already been changed.
-
         xyz_total[0] += magADC[0];                  // Since the measurements are noisy, they should be averaged rather than taking the max.
         xyz_total[1] += magADC[1];
         xyz_total[2] += magADC[2];
-
-        if (-4096 >= min(magADC[0], min(magADC[1], magADC[2])))     // Detect saturation.
+        if (-4096 >= min(magADC[0], min(magADC[1], magADC[2]))) // Detect saturation.
         {
             bret = false;
             break;                                  // Breaks out of the for loop.  No sense in continuing if we saturated.
@@ -74,15 +72,12 @@ void hmc5883lInit(float *calibrationGain)
     for (i = 0; i < 10; i++)
     {
         i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE, 1);
-        delay(50);
+        delay(100);
         hmc5883lRead(magADC);                       // Get the raw values in case the scales have already been changed.
-
         xyz_total[0] -= magADC[0];                  // Since the measurements are noisy, they should be averaged.
         xyz_total[1] -= magADC[1];
         xyz_total[2] -= magADC[2];
-
-        // Detect saturation.
-        if (-4096 >= min(magADC[0], min(magADC[1], magADC[2])))
+        if (-4096 >= min(magADC[0], min(magADC[1], magADC[2]))) // Detect saturation.
         {
             bret = false;
             break;                                  // Breaks out of the for loop.  No sense in continuing if we saturated.
@@ -90,14 +85,14 @@ void hmc5883lInit(float *calibrationGain)
         LED1_TOGGLE;
     }
 
-    magGain[0] = fabs(820.0 * HMC58X3_X_SELF_TEST_GAUSS * 2.0f * 10.0f / (float)xyz_total[0]);
-    magGain[1] = fabs(820.0 * HMC58X3_Y_SELF_TEST_GAUSS * 2.0f * 10.0f / (float)xyz_total[1]);
-    magGain[2] = fabs(820.0 * HMC58X3_Z_SELF_TEST_GAUSS * 2.0f * 10.0f / (float)xyz_total[2]);
+    magGain[0] = fabs(16400.0f * HMC58X3_X_SELF_TEST_GAUSS / (float)xyz_total[0]);
+    magGain[1] = fabs(16400.0f * HMC58X3_Y_SELF_TEST_GAUSS / (float)xyz_total[1]);
+    magGain[2] = fabs(16400.0f * HMC58X3_Z_SELF_TEST_GAUSS / (float)xyz_total[2]);
 
     // leave test mode
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFA, 0x70);   // Configuration Register A  -- 0 11 100 00  num samples: 8 ; output rate: 15Hz ; normal measurement mode
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFB, 0x20);   // Configuration Register B  -- 001 00000    configuration gain 1.3Ga
-    i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE, 0x00);    // Mode register             -- 000000 00    continuous Conversion Mode
+    i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE,  0x00);   // Mode register             -- 000000 00    continuous Conversion Mode
     delay(100);
 
     if (!bret)                                      // Something went wrong so get a best guess
@@ -106,7 +101,7 @@ void hmc5883lInit(float *calibrationGain)
         magGain[1] = 1.0f;
         magGain[2] = 1.0f;
     }
-
+ 
     if (calibrationGain)                            // if parameter was passed, give calibration values back
     {
         calibrationGain[0] = magGain[0];
@@ -115,13 +110,12 @@ void hmc5883lInit(float *calibrationGain)
     }
 }
 
-void hmc5883lRead(int16_t *magData)
+void hmc5883lRead(int16_t *magData)                 // Read aligned
 {
-    uint8_t buf[6];
-
+    uint8_t  buf[6];
     i2cRead(MAG_ADDRESS, MAG_DATA_REGISTER, 6, buf);
-
-    magData[0] = buf[0] << 8 | buf[1];
-    magData[1] = buf[2] << 8 | buf[3];
-    magData[2] = buf[4] << 8 | buf[5];
+    magData[0] = (int16_t)(((uint16_t)buf[0] << 8) | (uint16_t)buf[1]);
+    magData[1] = (int16_t)(((uint16_t)buf[2] << 8) | (uint16_t)buf[3]);
+    magData[2] = (int16_t)(((uint16_t)buf[4] << 8) | (uint16_t)buf[5]);
+    alignSensors(ALIGN_MAG, magData);
 }

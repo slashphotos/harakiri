@@ -4,7 +4,7 @@
 int16_t         gyroADC[3], accADC[3], accSmooth[3];
 float           magADCfloat[3];
 int16_t         acc_25deg = 0;
-int32_t         BaroAlt;
+float           BaroAlt;
 int16_t         sonarAlt;         // to think about the unit
 int32_t         EstAlt;           // in cm
 int32_t         AltHold;
@@ -14,7 +14,6 @@ int16_t         BaroI;
 int16_t         BaroD;
 uint8_t         newbaroalt;
 bool            GroundAltInitialized = false;
-static int32_t  GroundAlt;
 static uint16_t ACCDeltaTime;
 uint16_t        BaroDeltaTime;
 float           actual_speed[2];
@@ -224,7 +223,7 @@ void rotateV(struct fp_vector *v, float *delta)
 
 int16_t _atan2f(float y, float x)
 {
-    return (int16_t)(atan2f(y, x) * (1800.0f / M_PI));
+    return (int16_t)constrain(atan2f(y, x) * 1800.0f / M_PI, -1800.0f, 1800.0f);
 }
 
 float fsq(float x)
@@ -299,9 +298,7 @@ static void getEstimatedAttitude(void)
         tmp2 = EstM.A[2];
         Xh   = tmp1 * cp + tmp0 * sr * sp + tmp2 * cr * sp;            // Xh = EstM.A[1] * cp + EstM.A[0] * sr * sp + EstM.A[2] * cr * sp;
         Yh   = tmp0 * cr - tmp2 * sr;                                  // Yh = EstM.A[0] * cr - EstM.A[2] * sr;
-//        tmp0 = atan2f(-Yh,Xh) * 180.0f / M_PI;                         // Get rad to Degree
-//        heading = tmp0 + magneticDeclination;                          // Add Declination
-        heading = ((atan2f(-Yh, Xh) * 1800.0f / M_PI) + magneticDeclination) * 0.1f;//  / 10.0f;
+        heading = constrain(atan2f(-Yh,Xh) * 180.0f / M_PI, -180.0f, 180.0f) + magneticDeclination; // Get rad to Degree and add declination (without *10 shit)
         if (heading > 180.0f)       heading = heading - 360.0f;        // Wrap to -180 0 +180 Degree
         else if (heading < -180.0f) heading = heading + 360.0f;
     }
@@ -346,14 +343,11 @@ static void getEstimatedAttitude(void)
 void getEstimatedAltitude(void)
 {
     static uint8_t  Vidx, Bidx;
-    static int32_t  BaroTab[BaroTabsize], LastEstAltBaro, Sonarcorrector;
+    static float    BaroTab[BaroTabsize],VarioTab[VarioTabsize], LastEstAltBaro, GroundAlt, Sonarcorrector, accalt;
     static uint32_t IniTimer = 0;
     static uint8_t  Gathercnt;
-    static float    VarioTab[VarioTabsize];
-    static float    accalt;
     uint8_t         i;
-    int32_t         EstAltBaro, tmp32;
-    float           BaroClimbRate, ThrAngle, fltmp;
+    float           BaroClimbRate, ThrAngle, fltmp, EstAltBaro;
 
     if (!GroundAltInitialized && newbaroalt == 1)                // Do init here
     {
@@ -371,7 +365,7 @@ void getEstimatedAltitude(void)
                Gathercnt++;
                if (Gathercnt == 64)
                {
-                   GroundAlt = GroundAlt >> 6;                   // Get Groundalt (/64) and purge buffers below
+                   GroundAlt = GroundAlt / 64.0f;                // Get Groundalt (/64) and purge buffers below
                    for (i = 0; i < VarioTabsize; i++) VarioTab[i] = 0;
                    for (i = 0; i < BaroTabsize; i++)  BaroTab[i]  = 0;
                    accalt = 0;
@@ -385,10 +379,10 @@ void getEstimatedAltitude(void)
     if (sensors(SENSOR_SONAR) && SonarStatus !=0 && GroundAltInitialized) // Only do sonar if available and everything is settled
     {
         if(SonarStatus == 1)                                     // First contact
-            Sonarcorrector = EstAlt + GroundAlt - (int32_t)sonarAlt; // Calculate baro/sonar displacement on 1st contact
+            Sonarcorrector = (float)EstAlt + GroundAlt - (float)sonarAlt; // Calculate baro/sonar displacement on 1st contact
         else                                                     // SonarStatus must be 2 here "steady contact"
             if (newbaroalt !=0)                                  // We have steady sonar contact, but we need new barovals to CF them
-            BaroAlt = (float)(Sonarcorrector + (int32_t)sonarAlt) * cfg.snr_cf + (float)BaroAlt * (1 - cfg.snr_cf); // Set weight / make transition smoother
+            BaroAlt = (Sonarcorrector + (float)sonarAlt) * cfg.snr_cf + BaroAlt * (1 - cfg.snr_cf); // Set weight / make transition smoother
     }
     else Sonarcorrector = 0;                                     // Obsolete, but i like my variables set to 0 if state unknown
 
@@ -400,9 +394,9 @@ void getEstimatedAltitude(void)
         BaroTab[Bidx] = BaroAlt - GroundAlt;                     //BaroAlt - GroundAlt Get EstAltBaro
         Bidx++;
         if (Bidx == BaroTabsize) Bidx = 0;
-        tmp32 = 0;
-        for (i = 0; i < BaroTabsize; i++) tmp32 = tmp32 + BaroTab[i];
-        EstAltBaro     = tmp32 / BaroTabsize;
+        fltmp = 0;
+        for (i = 0; i < BaroTabsize; i++) fltmp = fltmp + BaroTab[i];
+        EstAltBaro     = fltmp / BaroTabsize;
         fltmp          = 1000000 / (float)BaroDeltaTime;         // BaroDeltaTime in us
         VarioTab[Vidx] = (float)constrain(EstAltBaro - LastEstAltBaro, -127, 127) * fltmp;
         Vidx++;                                                  // Baro Climbrate

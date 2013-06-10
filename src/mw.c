@@ -43,7 +43,6 @@ uint16_t LandDetectMinThr = 0;                                       // Is set u
 // GPS
 // **********************
 int32_t  GPS_coord[2];                                               // They contain some ins as well
-int32_t  Real_GPS_coord[2];                                          // Pure GPS Coords
 int32_t  GPS_home[2];
 int32_t  GPS_WP[2];                                                  // Currently used WP
 uint8_t  GPS_numSat;
@@ -195,7 +194,11 @@ void annexCode(void)
 
     if(f.HEADFREE_MODE)
     {
-        float radDiff = (heading - headFreeModeHold) * RADX;
+//        float radDiff = (heading - headFreeModeHold) * RADX;
+        float radDiff = heading - headFreeModeHold + (float)cfg.hdfreeangle;    // let the user adjust headfree phase
+        if (radDiff > 180.0f)       radDiff = radDiff - 360.0f;                 // Wrap to -180 0 +180 Degree
+        else if (radDiff < -180.0f) radDiff = radDiff + 360.0f;
+        radDiff = radDiff * RADX;                                               // Degree to RAD
         float cosDiff = cosf(radDiff);
         float sinDiff = sinf(radDiff);
         int16_t rcCommand_PITCH = (float)rcCommand[PITCH] * cosDiff + (float)rcCommand[ROLL] * sinDiff;
@@ -509,7 +512,7 @@ void loop(void)
     static uint8_t  RTLstate;
     static int16_t  DistanceToHomeMetersOnRTLstart;
     static uint8_t  PHminSat;
-    float           CosYawxPhase, SinYawyPhase, TmpPhase;
+    float           CosYawxPhase, SinYawyPhase, TmpPhase, tmp0flt;
     int16_t         tmp0, thrdiff;
 
     // this will return false if spektrum is disabled. shrug.
@@ -658,7 +661,7 @@ void loop(void)
                 AccInflightCalibrationSavetoEEProm = 1;
             }
         }
-
+        
         for (i = 0; i < cfg.auxChannels; i++)                        // for (i = 0; i < 4; i++)
             auxState |= (rcData[AUX1 + i] < 1300) << (3 * i) | (1300 < rcData[AUX1 + i] && rcData[AUX1 + i] < 1700) << (3 * i + 1) | (rcData[AUX1 + i] > 1700) << (3 * i + 2);
         for (i = 0; i < CHECKBOXITEMS; i++) rcOptions[i] = (auxState & cfg.activate[i]) > 0;
@@ -667,6 +670,8 @@ void loop(void)
 
         if ((rcOptions[BOXARM]) == 0) f.OK_TO_ARM = 1;               // Moved it here
 
+        if (sensors(SENSOR_BARO) && !GroundAltInitialized) DisArmCopter(); // Keep Copter disarmed until baro init is done
+          
 /////// GPS INS TESTCODE
 //				int16_t knob = constrain(rcData[AUX3]-1000,0,1000);
 //				cfg.gps_ins_vel = (500 + (float)knob * 0.5f)/1000.0f;
@@ -920,7 +925,7 @@ void loop(void)
 #endif
 
 #ifdef  MAG
-        if (sensors(SENSOR_MAG))
+        if (sensors(SENSOR_MAG) &&  cfg.mag_calibrated == 1)
         {
             if (rcOptions[BOXMAG])
             {
@@ -959,7 +964,7 @@ void loop(void)
                 }
                 else f.GPS_HOME_MODE = 0;
 
-                if (rcOptions[BOXGPSHOLD] && GPS_numSat >= PHminSat) // Crashpilot Only do poshold with 7 Sats or more
+                if (rcOptions[BOXGPSHOLD] && GPS_numSat >= PHminSat) // Crashpilot Only do poshold with specified Satnr or more
                 {
                     if (!f.GPS_HOLD_MODE)
                     {
@@ -979,6 +984,14 @@ void loop(void)
             }
 
         }                                                            // END of sensors SENSOR_GPS
+
+        else
+
+        {
+            f.GPS_HOME_MODE = 0;
+            f.GPS_HOLD_MODE = 0;
+            nav_mode = NAV_MODE_NONE;
+        }
 
         if (rcOptions[BOXPASSTHRU]) f.PASSTHRU_MODE = 1;
         else f.PASSTHRU_MODE = 0;
@@ -1188,7 +1201,7 @@ void loop(void)
             }
             else
             {
-                TmpPhase = heading + cfg.gps_phase;                  // add Phase
+                TmpPhase = heading + (float)cfg.gps_phase;           // add Phase
                 if (TmpPhase > 180.0f) TmpPhase = TmpPhase - 360.0f; // Wrap to -180 0 +180 Degree
                 else if (TmpPhase < -180.0f) TmpPhase = TmpPhase + 360.0f;
                 TmpPhase     = TmpPhase * RADX;                      // Degree to RAD
@@ -1227,27 +1240,30 @@ void loop(void)
             if ((f.ANGLE_MODE || f.HORIZON_MODE) && axis < 2)        // MODE relying on ACC 50 degrees max inclination
             {
                 errorAngle = constrain(2.0f * (float)rcCommand[axis] + GPS_angle[axis], -500.0f, +500.0f) - (float)angle[axis] + (float)cfg.angleTrim[axis];
-                errorAngle = errorAngle * (float)cycleTime/BasePIDtime; // Crashpilot: Include Cylcletime take 3ms as basis. More deltaT more error
-                PTermACC = errorAngle * (float)cfg.P8[PIDLEVEL] / 100.0f;
-                PTermACC = constrain(PTermACC, -(float)cfg.D8[PIDLEVEL] * 5.0f, +(float)cfg.D8[PIDLEVEL] * 5.0f);
+                errorAngle = errorAngle * (float)cycleTime / BasePIDtime; // Crashpilot: Include Cylcletime take 3ms as basis. More deltaT more error
+                PTermACC   = errorAngle * (float)cfg.P8[PIDLEVEL] * 0.01f;
+                tmp0flt    = (float)cfg.D8[PIDLEVEL] * 5.0f;
+                PTermACC   = constrain(PTermACC, -tmp0flt, +tmp0flt);
                 errorAngleI[axis] = constrain(errorAngleI[axis] + errorAngle, -10000.0f, +10000.0f); // WindUp
-                ITermACC = ((float)errorAngleI[axis] * (float)cfg.I8[PIDLEVEL])/4096.0f;
+                ITermACC   = ((float)errorAngleI[axis] * (float)cfg.I8[PIDLEVEL]) / 4096.0f;
             }
-            if (!f.ANGLE_MODE || axis == 2)                          // MODE relying on GYRO or YAW axis
+
+            if (!f.ANGLE_MODE || f.HORIZON_MODE || axis == 2)        // MODE relying on GYRO or YAW axis
             {
-                error = (float)rcCommand[axis]*80.0f/(float)cfg.P8[axis];
-                error = error*(float)cycleTime/BasePIDtime;          // Crashpilot: Include Cylcletime take 3ms as basis. More deltaT more error
+                error  = (float)rcCommand[axis] * 80.0f / (float)cfg.P8[axis];
+                error  = error * (float)cycleTime / BasePIDtime;     // Crashpilot: Include Cylcletime take 3ms as basis. More deltaT more error
                 error -= (float)gyroData[axis];
                 PTermGYRO = (float)rcCommand[axis];
                 errorGyroI[axis] = constrain(errorGyroI[axis] + error, -16000.0f, +16000.0f);
                 if (abs(gyroData[axis]) > 640.0f)
                     errorGyroI[axis] = 0;
-                ITermGYRO = (errorGyroI[axis]/125.0f * (float)cfg.I8[axis])/64.0f;
+                ITermGYRO = errorGyroI[axis] * (float)cfg.I8[axis] * 0.000125f;
             }
+
             if (f.HORIZON_MODE && axis < 2)
             {
-                PTerm = (PTermACC * (500.0f - prop) + PTermGYRO * prop) / 500.0f;
-                ITerm = (ITermACC * (500.0f - prop) + ITermGYRO * prop) / 500.0f;
+                PTerm = (PTermACC * (500.0f - prop) + PTermGYRO * prop) * 0.002f;
+                ITerm = (ITermACC * (500.0f - prop) + ITermGYRO * prop) * 0.002f;
             }
             else
             {
@@ -1262,16 +1278,16 @@ void loop(void)
                     ITerm = ITermGYRO;
                 }
             }
-            PTerm -= (float)gyroData[axis] * (float)dynP8[axis] / 10.0f / 8.0f;
-            delta = (float)gyroData[axis] - (float)lastGyro[axis];
-            lastGyro[axis] = gyroData[axis];
-            deltaSum = delta1[axis] + delta2[axis] + delta;
-            delta2[axis] = delta1[axis];
-            delta1[axis] = delta;
-            deltaSum = lastDTerm[axis] + (dT / (RC + dT)) * (deltaSum - lastDTerm[axis]); // pt1 element http://www.multiwii.com/forum/viewtopic.php?f=23&t=2624
+            PTerm          -= ((float)gyroData[axis] * (float)dynP8[axis] * 0.0125f);
+            delta           = (float)gyroData[axis] - (float)lastGyro[axis];
+            lastGyro[axis]  = gyroData[axis];
+            deltaSum        = delta1[axis] + delta2[axis] + delta;
+            delta2[axis]    = delta1[axis];
+            delta1[axis]    = delta;
+            deltaSum        = lastDTerm[axis] + (dT / (RC + dT)) * (deltaSum - lastDTerm[axis]); // pt1 element http://www.multiwii.com/forum/viewtopic.php?f=23&t=2624
             lastDTerm[axis] = deltaSum;						                   // pt1 element http://www.multiwii.com/forum/viewtopic.php?f=23&t=2624
-            DTerm = ((float)deltaSum * (float)dynD8[axis])/32.0f;
-            axisPID[axis] =  PTerm + ITerm - DTerm;
+            DTerm           = (float)deltaSum * (float)dynD8[axis] * 0.03125f;
+            axisPID[axis]   = PTerm + ITerm - DTerm;
         }
 
     }
@@ -1285,20 +1301,22 @@ void loop(void)
             {
                 errorAngle = (int16_t)constrain(2 * rcCommand[axis] + (int16_t)GPS_angle[axis], -500, +500) - angle[axis] + cfg.angleTrim[axis];
                 PTermACC   = (int16_t)((int32_t)errorAngle * cfg.P8[PIDLEVEL] / 100);
-                PTermACC = (int16_t)constrain(PTermACC, -cfg.D8[PIDLEVEL] * 5, +cfg.D8[PIDLEVEL] * 5);
+                PTermACC   = (int16_t)constrain(PTermACC, -cfg.D8[PIDLEVEL] * 5, +cfg.D8[PIDLEVEL] * 5);
                 errorAngleI[axis] = (int16_t)constrain(errorAngleI[axis] + errorAngle, -10000, +10000); // WindUp
-                ITermACC = (int16_t)(((int32_t)errorAngleI[axis] * cfg.I8[PIDLEVEL]) / 4096);
+                ITermACC   = (int16_t)(((int32_t)errorAngleI[axis] * cfg.I8[PIDLEVEL]) / 4096);
             }
-            if (!f.ANGLE_MODE || axis == 2)
+
+            if (!f.ANGLE_MODE || f.HORIZON_MODE || axis == 2)        // MODE relying on GYRO or YAW axis
             {
-                error = (int16_t)((int32_t)rcCommand[axis] * 80 / cfg.P8[axis]);
-                error -= gyroData[axis];
-                PTermGYRO = rcCommand[axis];
+                error            = (int16_t)((int32_t)rcCommand[axis] * 80 / cfg.P8[axis]);
+                error           -= gyroData[axis];
+                PTermGYRO        = rcCommand[axis];
                 errorGyroI[axis] = (int16_t)constrain(errorGyroI[axis] + error, -16000, +16000);
                 if (abs(gyroData[axis]) > 640)
                     errorGyroI[axis] = 0;
                 ITermGYRO = (int16_t)((errorGyroI[axis] / 125 * cfg.I8[axis]) / 64.0f);
             }
+
             if (f.HORIZON_MODE && axis < 2)
             {
                 PTerm = (int16_t)((int32_t)PTermACC * (500 - prop) + (int32_t)PTermGYRO * prop) / 500;
@@ -1317,14 +1335,14 @@ void loop(void)
                     ITerm = ITermGYRO;
                 }
             }
-            PTerm -= (int16_t)((int32_t)gyroData[axis] * dynP8[axis] / 10 / 8);
-            delta = (int16_t)(gyroData[axis] - lastGyro[axis]);
+            PTerm         -= (int16_t)((int32_t)gyroData[axis] * dynP8[axis] / 10 / 8);
+            delta          = (int16_t)(gyroData[axis] - lastGyro[axis]);
             lastGyro[axis] = gyroData[axis];
-            deltaSum = (int16_t)(delta1[axis] + delta2[axis] + delta);
-            delta2[axis] = delta1[axis];
-            delta1[axis] = delta;
-            DTerm = (int16_t)(((int32_t)deltaSum * dynD8[axis])/32.0f);
-            axisPID[axis] = PTerm + ITerm - DTerm;
+            deltaSum       = (int16_t)(delta1[axis] + delta2[axis] + delta);
+            delta2[axis]   = delta1[axis];
+            delta1[axis]   = delta;
+            DTerm          = (int16_t)(((int32_t)deltaSum * dynD8[axis])/32.0f);
+            axisPID[axis]  = PTerm + ITerm - DTerm;
         }
 
     }
