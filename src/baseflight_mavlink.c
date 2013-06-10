@@ -210,17 +210,18 @@ void baseflight_mavlink_send_updates (void) {
 	}
 
 
-	mavlink_msg_attitude_pack(1, 200, &msg2, timer_n++, toRad((float)angle[0] / 10.0), toRad((float)angle[1] / -10.0), toRad((float)heading / 10.0), 0.0, 0.0, 0.0);
+	mavlink_msg_attitude_pack(1, 200, &msg2, timer_n, toRad((float)angle[0] / 10.0), toRad((float)angle[1] / -10.0), toRad((float)heading / 10.0), 0.0, 0.0, 0.0);
 	baseflight_mavlink_send_message(&msg2);
 
-//	mavlink_msg_rc_channels_scaled_pack(1, 200, &msg2, timer_n++, 0, (ModelData.radio[0]) * 10, (ModelData.radio[1]) * 10, (ModelData.radio[2]) * 10, (ModelData.radio[3]) * 10, (ModelData.radio[4]) * 10, (ModelData.radio[5]) * 10, (ModelData.radio[6]) * 10, (ModelData.radio[7]) * 10, 100);
+	mavlink_msg_rc_channels_scaled_pack(1, 200, &msg2, timer_n, 0, (float)((rcDataSAVE[0]) - 1500) * 20, (float)((rcDataSAVE[1]) - 1500) * 20, (float)((rcDataSAVE[3]) - 1500) * 20, (float)((rcDataSAVE[2]) - 1500) * 20, (float)((rcDataSAVE[4]) - 1500) * 20, (float)((rcDataSAVE[5]) - 1500) * 20, (float)((rcDataSAVE[6]) - 1500) * 20, (float)((rcDataSAVE[7]) - 1500) * 20, 100);
+	baseflight_mavlink_send_message(&msg2);
+
+	mavlink_msg_gps_raw_int_pack(1, 200, &msg2, timer_n, f.GPS_FIX, GPS_coord[LAT] * 10000000, GPS_coord[LON] * 10000000, GPS_altitude, 0, 0, GPS_speed, 0, GPS_numSat);
+	baseflight_mavlink_send_message(&msg2);
+
+//	mavlink_msg_vfr_hud_pack(1, 200, &msg2, GPS_speed, GPS_speed, toRad((float)heading / 10.0), 0, GPS_altitude, 0.0);
 //	baseflight_mavlink_send_message(&msg2);
 
-//	mavlink_msg_vfr_hud_pack(1, 200, &msg2, 0, 0, 0, 0, ModelData.p_alt, 0.0);
-//	baseflight_mavlink_send_message(&msg2);
-
-//	mavlink_msg_gps_raw_int_pack(1, 200, &msg2, timer_n++, ModelData.gpsfix, ModelData.p_lat * 10000000, ModelData.p_long * 10000000, ModelData.p_alt * 1000, 0, 0, ModelData.speed * 100, 0, ModelData.numSat);
-//	baseflight_mavlink_send_message(&msg2);
 
 }
 
