@@ -937,78 +937,78 @@
       <Increment>1</Increment>
       <User>Advanced</User>
     </ETC_OLDCTRLR>
-    <RATE_PIT_P>
+    <PITCH_P>
       <DisplayName>p_pitch</DisplayName>
       <Description>cfg.P8[PITCH]</Description>
       <Units></Units>
       <Range>0 200</Range>
       <Increment>1</Increment>
       <User>Advanced</User>
-    </RATE_PIT_P>
-    <RATE_PIT_I>
+    </PITCH_P>
+    <PITCH_I>
       <DisplayName>i_pitch</DisplayName>
       <Description>cfg.I8[PITCH]</Description>
       <Units></Units>
       <Range>0 200</Range>
       <Increment>1</Increment>
       <User>Advanced</User>
-    </RATE_PIT_I>
-    <RATE_PIT_D>
+    </PITCH_I>
+    <PITCH_D>
       <DisplayName>d_pitch</DisplayName>
       <Description>cfg.D8[PITCH]</Description>
       <Units></Units>
       <Range>0 200</Range>
       <Increment>1</Increment>
       <User>Advanced</User>
-    </RATE_PIT_D>
-    <RATE_RLL_P>
+    </PITCH_D>
+    <ROLL_P>
       <DisplayName>p_roll</DisplayName>
       <Description>cfg.P8[ROLL]</Description>
       <Units></Units>
       <Range>0 200</Range>
       <Increment>1</Increment>
       <User>Advanced</User>
-    </RATE_RLL_P>
-    <RATE_RLL_I>
+    </ROLL_P>
+    <ROLL_I>
       <DisplayName>i_roll</DisplayName>
       <Description>cfg.I8[ROLL]</Description>
       <Units></Units>
       <Range>0 200</Range>
       <Increment>1</Increment>
       <User>Advanced</User>
-    </RATE_RLL_I>
-    <RATE_RLL_D>
+    </ROLL_I>
+    <ROLL_D>
       <DisplayName>d_roll</DisplayName>
       <Description>cfg.D8[ROLL]</Description>
       <Units></Units>
       <Range>0 200</Range>
       <Increment>1</Increment>
       <User>Advanced</User>
-    </RATE_RLL_D>
-    <RATE_YAW_P>
+    </ROLL_D>
+    <YAW_P>
       <DisplayName>p_yaw</DisplayName>
       <Description>cfg.P8[YAW]</Description>
       <Units></Units>
       <Range>0 200</Range>
       <Increment>1</Increment>
       <User>Advanced</User>
-    </RATE_YAW_P>
-    <RATE_YAW_I>
+    </YAW_P>
+    <YAW_I>
       <DisplayName>i_yaw</DisplayName>
       <Description>cfg.I8[YAW]</Description>
       <Units></Units>
       <Range>0 200</Range>
       <Increment>1</Increment>
       <User>Advanced</User>
-    </RATE_YAW_I>
-    <RATE_YAW_D>
+    </YAW_I>
+    <YAW_D>
       <DisplayName>d_yaw</DisplayName>
       <Description>cfg.D8[YAW]</Description>
       <Units></Units>
       <Range>0 200</Range>
       <Increment>1</Increment>
       <User>Advanced</User>
-    </RATE_YAW_D>
+    </YAW_D>
     <ALT_P>
       <DisplayName>p_alt</DisplayName>
       <Description>cfg.P8[PIDALT]</Description>
