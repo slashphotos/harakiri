@@ -92,13 +92,12 @@ typedef struct ProjectBrake {
 */
 
 static bool      check_missed_wp(void);
-static void      GPS_HzSandbox(void);
 static void      GPS_NewData(uint16_t c);
 static void      GPS_distance_cm_bearing(int32_t * lat1, int32_t * lon1, int32_t * lat2, int32_t * lon2, uint32_t * dist, int32_t * bearing);
-static void      GPS_calc_longitude_scaling(void);
+static void      GPS_calc_longitude_scaling();
 static void      GPS_calc_velocity(void);
 static void      GPS_calc_location_error(int32_t * target_lat, int32_t * target_lng, int32_t * gps_lat, int32_t * gps_lng);
-static void      GPS_calc_posholdCrashpilot(bool overspeed, bool useabsolute);
+static void      GPS_calc_posholdCrashpilot(bool overspeed);
 static void      GPS_calc_nav_rate(int16_t max_speed);
 static int16_t   GPS_calc_desired_speed(void);
 static bool      GPS_newFrame(char c);
@@ -107,7 +106,9 @@ static bool      GPS_MTK_newFrame(uint8_t data);
 static bool      GPS_UBLOX_newFrame(uint8_t data);
 static bool      UBLOX_parse_gps(void);
 static void      gpsPrint(const char *str);
+float            wrap_18000(float error);
 static int32_t   wrap_36000(int32_t angle);
+static void      ProjectGPStoWP(float time);// Projects WPGPS ahead current movement
 static float     get_P(float error, struct PID_PARAM_* pid);
 static float     get_I(float error, float* dt, struct PID_* pid, struct PID_PARAM_* pid_param);
 static float     get_D(float input, float* dt, struct PID_* pid, struct PID_PARAM_* pid_param);
@@ -124,13 +125,16 @@ static PID       navPID[2];
 // INS & Core Variables
 extern float     actual_speed[2], ACCDeltaTimeINS;
 static float     dTnav;                   // Delta Time in milliseconds for navigation computations, updated with every good GPS read
-static float     LocError[2];             // updated after GPS read - 5-10hz Error in cm from target
-static int32_t   Real_GPS_coord[2];       // RAW GPS Coords
+//static int32_t   Real_GPS_coord[2];     // Moved to global
+static int16_t   RealAverageGPSSpeed[2];  // This is a moving average of a 5 values Buffer
+static uint16_t  RealAverageGPSTotalSpeed;// In cm/s will roll over beyond 2359,296 km/h ca. MACH 2
+static float     rate_error[2];           // The difference between the desired rate of travel and the actual rate of travel
+static float     error[2];                // updated after GPS read - 5-10hz Error in cm from target
 static uint32_t  TimestampNewGPSdata;     // Crashpilot in micros
 static int16_t   maxbank100;              // Maximum GPS Tiltangle
-static int16_t   maxbankbrake100;         // Maximum GPS Brake Tiltangle < maxbank100
 
 // PH Variables
+static float     MinAngleFactor;
 static bool      PH1stRun;
 
 // NAVIGATION & Crosstrack Variables
@@ -146,185 +150,163 @@ static int16_t   crosstrack_error;        // The amount of angle correction appl
 static float     OneCmTo[2];              // Moves one cm in Gps coords
 static float     CosLatScaleLon;          // this is used to offset the shrinking longitude as we go towards the poles
 
+
 #define PhStickCenterTimeout  300000      // Defines the time in us when we consider the sticks really back to center
-#define PhSettleTimeout       410000      // Defines the time in us, where actual speed must be below settlespeed, to consider a settled copter
+#define PhSettleTimeout       300000      // Defines the time in us, where actual speed must be below settlespeed, to consider a settled copter
 #define PhForceSettleTimeout 4000000      // Over all Timeout for settling stuff, after 4 seconds a PH with absolute Position and full tiltangle is forced - god be with you
 
 void GPS_alltime(void)
 {
-    if (f.GPS_FIX && GPS_numSat >= 5)                                           // Do gps stuff with at least 5 Sats
-    {
-        GPS_calc_velocity();                                                    // Heart of the gps ins, called every time
-        dTnav = ACCDeltaTimeINS;                                                // dTnav in "seconds"
-        dTnav = min(dTnav, 1.0f);                                               // This prevents crazy dt on first run
-        GPS_HzSandbox();                                                        // Just in case we want a Hz sandbox here in the future
-    }
-    else
-    {
-        GPS_reset_nav();
-    }
-    debug[0] = GPS_ground_course / 10;
-}
-
-static void GPS_HzSandbox(void)
-{
     static uint32_t PosHoldBlindTimer  = 0;
-    static uint32_t PhTimer1           = 0;
-    static uint32_t PhTimer2           = 0;
+    static uint32_t TooFastResetTimer  = 0;
+    static uint32_t ForcePhSettleTimer = 0;
     static bool     PHtoofast;
-    static bool     PHChange;
-    static bool     PHAbsolute;
-    static uint8_t  PHcascade;
-    int16_t         speed;
+    static bool     PSholdChange;
     uint32_t        dist;
     int32_t         dir;
+    int16_t         speed;
 
-    if (!f.ARMED) f.GPS_FIX_HOME = 0;
-    if (!f.GPS_FIX_HOME)                                                        // Do relative to home stuff for gui etc
+    if (f.GPS_FIX && GPS_numSat >= 5)                                               // Do gps stuff with at least 5 Sats
     {
-        if (f.ARMED)
+        if (!f.ARMED) f.GPS_FIX_HOME = 0;
+        if (!f.GPS_FIX_HOME && f.ARMED) GPS_reset_home_position();
+        dTnav = ACCDeltaTimeINS;                                                    // Time in Secs (0.xxxx sec) from ACC read, that is important
+        dTnav = min(dTnav, 1.0f);
+        GPS_calc_velocity();                                                        // Heart of the gps ins (and getEstimatedAttitude()), called every time
+        if (!f.GPS_FIX_HOME)                                                        // Do relative to home stuff for gui etc
         {
-            GPS_reset_home_position();
-        }
-        else
-        {
-            GPS_distanceToHome  = 0;
+            GPS_distanceToHome = 0;
             GPS_directionToHome = 0;
         }
-    }
-    else                                                                        // Do dist to Home Stuff here
-    {
-        GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_home[LAT], &GPS_home[LON], &dist, &dir);
-        GPS_distanceToHome = dist / 100;
-        GPS_directionToHome = dir / 100;
-    }
-
-    if (DoingGPS())
-    {
-        switch (nav_mode)
+        else                                                                        // Do dist to Home Stuff here
         {
-        case NAV_MODE_POSHOLD:
-            if (PH1stRun)
-            {
-//              if (GPS_speed > cfg.gps_ph_settlespeed) Phcascade = 1;          // Trigger worst case szenario
-//              if (GPS_speed < cfg.gps_ph_settlespeed) Phcascade = 2;          // Trigger normal case
-                PHcascade         = 1;                                          // Always trigger worst case szenario
-                PH1stRun          = false;                                      // Don't do this again ...
-                PHChange          = false;
-                PhTimer1          = 0;
-                PhTimer2          = 0;
-                PosHoldBlindTimer = 0;
-                GPS_reset_nav();                                                // Reset nav
-            }
+            GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_home[LAT], &GPS_home[LON], &dist, &dir);
+            GPS_distanceToHome = dist / 100;
+            GPS_directionToHome = dir / 100;
+        }
 
-            if (rcCommand[PITCH] != 0 || rcCommand[ROLL] != 0)                  // Ph Override
+        if (DoingGPS())
+        {
+            switch (nav_mode)
             {
-                PosHoldBlindTimer = 0;
-                PHcascade         = 0;                                          // Reset cascade
-                PHChange          = true;
-                PH1stRun          = false;
-            }
-            else                                                                // Sticks are center
-            {
-                if (PHChange)                                                   // Are we coming from a change? Stick back to neutral, set timer before accepting it
+            case NAV_MODE_POSHOLD:
+                if (PH1stRun)
                 {
-                    if (PosHoldBlindTimer == 0)                                 // Timer not set?
-                        PosHoldBlindTimer = currentTime + PhStickCenterTimeout; // Set 300ms timeout
-                    else                                                        // Timer running
-                        if (currentTime >= PosHoldBlindTimer)
-                            PH1stRun = true;                                    // Override done? Re - initialize PH on next run
+                    if (RealAverageGPSTotalSpeed > cfg.gps_ph_settlespeed)
+                        PHtoofast       = true;
+                    else
+                        PHtoofast       = false;
+
+                    PSholdChange        = false;
+                    PH1stRun            = false;
+                    TooFastResetTimer   = 0;
+                    ForcePhSettleTimer  = 0;
+                    nav[LON] = nav[LAT] = 0;
                 }
-            }
- 
-            switch(PHcascade)
-            {
-            case 0:
-                PHtoofast  = true;
-                PHAbsolute = false;
-                break;
-            case 1:                                                             // Start braking
-                PHtoofast  = true;
-                PHAbsolute = false;
-                if (GPS_speed < cfg.gps_ph_settlespeed && PhTimer1 == 0)
-                    PhTimer1 = currentTime + PhSettleTimeout;                   // Looking good, set 410ms timeout (2reads)
-                if (PhTimer2  == 0)
-                    PhTimer2 = currentTime + (uint32_t)cfg.gps_ph_forcetimeout * 1000;// Set 4sec timeout before brute force takes over
-                if (GPS_speed > cfg.gps_ph_settlespeed)                         // Reset Timer if speed exceeded limit during timeout
-                    PhTimer1 = 0;
-                if ((PhTimer1 != 0 && currentTime >= PhTimer1) || (currentTime >= PhTimer2))
-                    PHcascade++;                                                // Time is up in one way or another now proceed
-                break;
-            case 2:                                                             // Set Waittimer for GPS Catch Up before setting new GPS coords
-                PHtoofast  = false;
-                PHAbsolute = false;
-                PhTimer1   = currentTime + ((uint32_t)cfg.gps_lag * 1000);
-                PHcascade++;
-                break;
-            case 3:                                                             // Wait for gps to catch up and set new WP
-                PHtoofast  = false;
-                PHAbsolute = false;
-                if (currentTime >= PhTimer1)
+
+                if (rcCommand[PITCH] != 0 || rcCommand[ROLL] != 0)                  // Ph Override
+	              {
+                    PosHoldBlindTimer = 0;
+                    PSholdChange = true;
+                }
+                else                                                                // Sticks are center
                 {
-                    GPS_reset_nav();                                            // Reset accumulated nav shit here
-                    GPS_WP[LAT] = Real_GPS_coord[LAT];
-                    GPS_WP[LON] = Real_GPS_coord[LON];
-                    PHcascade++;
+                    if (PSholdChange)                                               // Are we coming from a change? Stick back to neutral, set timer before accepting it
+                    {
+                        if (PosHoldBlindTimer == 0)                                 // Timer not set?
+                            PosHoldBlindTimer = currentTime + PhStickCenterTimeout; // Set 300ms timeout
+                        else                                                        // Timer running
+                            if (currentTime >= PosHoldBlindTimer)                   // Override done?
+                            {
+                                PSholdChange       = false;                         // Ok we come from Override so pretend we are too fast
+                                PHtoofast          = true;                          // Force new braking and settling action in any case
+                                TooFastResetTimer  = 0;
+                                ForcePhSettleTimer = 0;
+                            }
+                    }
                 }
-            break;
-            case 4:                                                             // Do this forever ...
-                PHtoofast  = false;
-                PHAbsolute = true;
+
+                if (PHtoofast)
+                {
+                    GPS_WP[LAT] = GPS_coord[LAT];                                   // This is obsolete, i just do it in any case, perhaps some one wants to use other ph controller
+                    GPS_WP[LON] = GPS_coord[LON];                                   // No projection stuff here on purpose
+
+                    if (ForcePhSettleTimer  == 0)
+                        ForcePhSettleTimer = currentTime + PhForceSettleTimeout;    // Set 4sec timeout before brute force takes over
+
+                    if (RealAverageGPSTotalSpeed < cfg.gps_ph_settlespeed && TooFastResetTimer == 0)
+                        TooFastResetTimer = currentTime + PhSettleTimeout;          // Looking good, set 300ms timeout
+
+                    if (RealAverageGPSTotalSpeed > cfg.gps_ph_settlespeed)          // Reset Timer if speed exceeded limit during timeout
+                        TooFastResetTimer = 0;
+
+                    if ( (TooFastResetTimer  != 0 && currentTime >= TooFastResetTimer) ||
+                         (ForcePhSettleTimer != 0 && currentTime >= ForcePhSettleTimer) )
+                    {
+                        TooFastResetTimer  = 0;
+                        ForcePhSettleTimer = 0;
+                        PHtoofast          = false;                                 // We have settled stop this shit
+                        ProjectGPStoWP(cfg.gps_lag);                                // Once we settled, project final PH Point based on current position, last speeds and GPS Lag
+                    }
+                }
+
+                GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);                
+
+                if (PSholdChange)                                                   // We want to override
+                    nav[LON] = nav[LAT] = 0;                                        // Take back the last commands
+                else
+                    GPS_calc_posholdCrashpilot(PHtoofast);                          // PHtoofast limits the over all tiltangle per axis and only does realtive PH
                 break;
-            }
 
-            if (PHAbsolute) GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
-            if (!PHChange)  GPS_calc_posholdCrashpilot(PHtoofast, PHAbsolute);  // PHtoofast limits the over all tiltangle per axis and only does realtive PH
-            break;
+            case NAV_MODE_CIRCLE:
+                // *** DO SOME SERIOUS SHIT HERE LATER
+                //		GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_WP[LAT], &GPS_WP[LON], &wp_distance, &target_bearing);
+                //    GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
+                break;
 
-        case NAV_MODE_CIRCLE:
-            // *** DO SOME SERIOUS SHIT HERE LATER
-            //		GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_WP[LAT], &GPS_WP[LON], &wp_distance, &target_bearing);
-            //    GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
-            break;
+            case NAV_MODE_WP:
+            case NAV_MODE_RTL:
+                GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_WP[LAT], &GPS_WP[LON], &wp_distance, &target_bearing);
+                GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
 
-        case NAV_MODE_WP:
-        case NAV_MODE_RTL:
-            GPS_distance_cm_bearing(&GPS_coord[LAT], &GPS_coord[LON], &GPS_WP[LAT], &GPS_WP[LON], &wp_distance, &target_bearing);
-            GPS_calc_location_error(&GPS_WP[LAT], &GPS_WP[LON], &GPS_coord[LAT], &GPS_coord[LON]);
+                speed = GPS_calc_desired_speed();
+                GPS_calc_nav_rate(speed);                                           // use error as the desired rate towards the target Desired output is in nav_lat and nav_lon where 1deg inclination is 100
 
-            speed = GPS_calc_desired_speed();
-            GPS_calc_nav_rate(speed);                                           // use error as the desired rate towards the target Desired output is in nav_lat and nav_lon where 1deg inclination is 100
+                if (cfg.nav_controls_heading == 1 && wp_distance > 200)             // Tail control only update beyond 2 m
+                {
+                    if (cfg.nav_tail_first == 1) magHold = wrap_18000(nav_bearing - 18000) / 100;
+                    else magHold = nav_bearing / 100;
+                }
 
-            if (cfg.nav_controls_heading == 1 && wp_distance > 200)             // Tail control only update beyond 2 m
-            {
-                if (cfg.nav_tail_first == 1) magHold = wrap_18000((float)nav_bearing - 18000) / 100;
-                else magHold = nav_bearing / 100;
-            }
-
-            if ((wp_distance <= cfg.gps_wp_radius) || check_missed_wp())        // if yes switch to poshold mode
-            {
-                if (cfg.nav_rtl_lastturn == 1 && nav_mode == NAV_MODE_RTL) magHold = nav_takeoff_bearing;  // rotates it's head to takeoff direction if wanted
-                nav_mode = NAV_MODE_POSHOLD;
-                wp_mode  = WP_STATUS_DONE;
-                PH1stRun = true;
-            }
-            else wp_mode = WP_STATUS_NAVIGATING;
-            break;
-        }                                                                       // END Switch nav_mode
-    }                                                                           // END of gps calcs i.e navigating
+                if ((wp_distance <= cfg.gps_wp_radius) || check_missed_wp())        // if yes switch to poshold mode
+                {
+                    if (cfg.nav_rtl_lastturn == 1 && nav_mode == NAV_MODE_RTL) magHold = nav_takeoff_bearing;  // rotates it's head to takeoff direction if wanted
+                    nav_mode = NAV_MODE_POSHOLD;
+                    wp_mode  = WP_STATUS_DONE;
+                    PH1stRun = true;
+                }
+                else wp_mode = WP_STATUS_NAVIGATING;
+                break;
+            }                                                                       // END Switch nav_mode
+        }                                                                           // END of gps calcs i.e navigating
+    }
+    else GPS_reset_nav();                                                           // END GPS_numSat >= 5
 }
 
-void GPS_NewData(uint16_t c)                                                    // Called by uart2Init interrupt
+void GPS_NewData(uint16_t c)              // Called by uart2Init interrupt
 {
-    static int32_t  LatSpikeTab[5], LonSpikeTab[5];
-    int32_t         extmp;
-    uint8_t         rdy,sortidx,maxsortidx;
+    static int32_t  LatSpikeTab[5];
+    static int32_t  LonSpikeTab[5];
+    int32_t  extmp;                       // Crashpilot Spikefilter
+    uint8_t  rdy;                         // Crashpilot Spikefilter
+    uint8_t  sortidx;                     // Crashpilot Spikefilter
+    uint8_t  maxsortidx;                  // Crashpilot Spikefilter
 
     if (GPS_newFrame(c))
     {
-        if (GPS_update == 1) GPS_update = 0;                                    // Some strange telemetry shit, kept here for compatib.
+        if (GPS_update == 1) GPS_update = 0; // Some strange telemetry shit, kept here for compatib.
         else GPS_update = 1;
-        extmp = Real_GPS_coord[LAT];                                            // Spikefilter: Do it with every GPS Data only use when less X sats
+        extmp = Real_GPS_coord[LAT];      //  Crashpilot Spikefilter: Do it with every GPS Data only use when less 6 sats
         LatSpikeTab[4] = extmp;
         LatSpikeTab[0] = extmp;
         extmp = Real_GPS_coord[LON];
@@ -364,53 +346,56 @@ void GPS_NewData(uint16_t c)                                                    
             }
             maxsortidx --;
         }
-        if(!f.GPS_FIX)                                                          // Don't fill spikefilter with pure shit
+        if(!f.GPS_FIX)                                                              // Don't fill spikefilter with pure shit
         {
-            for (sortidx = 0; sortidx < 5; sortidx++)                           // Abuse sortidx and clear filter
+            for (sortidx = 0; sortidx < 5; sortidx++)                               // Abuse sortidx and clear filter
             {
                 LatSpikeTab[sortidx] = 0;
                 LonSpikeTab[sortidx] = 0;
             }
         }
-        else                                                                    // We have a fix. Can and shall we use Spikefiltervalues?
+        else                                                                        // We have a fix. Can and shall we use Spikefiltervalues?
         {
-            if (GPS_numSat < 6 && LatSpikeTab[2] != 0 && LonSpikeTab[2] != 0)   // Use filtervalues if they are not zero and needed (below 6 Sats)
+            if (GPS_numSat < 6 && LatSpikeTab[2] != 0 && LonSpikeTab[2] != 0)       // Use filtervalues if they are not zero and needed (below 6 Sats)
             {
                 Real_GPS_coord[LAT] = LatSpikeTab[2];
                 Real_GPS_coord[LON] = LonSpikeTab[2];
             }
         }
-        TimestampNewGPSdata = millis();                                         // Set timestamp of Data arrival in MS
+        TimestampNewGPSdata = millis();                                             // Set timestamp of Data arrival in MS
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Calculate our current speed vector from gps&acc position data
 // This is another important part of the gps ins
-static void GPS_calc_velocity(void)                                             // actual_speed[GPS_Y] y_GPS_speed positve = Up (NORTH) // actual_speed[GPS_X] x_GPS_speed positve = Right (EAST)
+static void GPS_calc_velocity(void)                                                 // actual_speed[GPS_Y] y_GPS_speed positve = Up (NORTH) // actual_speed[GPS_X] x_GPS_speed positve = Right (EAST)
 {
     static uint32_t LastTimestampNewGPSdata;
     static int32_t  Last_Real_GPS_coord[2];
+    static int16_t  RealSpeedHistory[2][5];
     static float    GPSmovementAdder[2];
     static bool     INSusable;
+    static uint8_t  SpedLstPtr = 0;
     float           Real_GPS_speed[2];
-    float           gpsHz, tmp0;
+    float           gpsHz, tmp0, tmp1;
+    int32_t         sum[2];
     uint32_t        RealGPSDeltaTime;
     uint8_t         i;
 
-    if (CosLatScaleLon == 0.0f) GPS_calc_longitude_scaling();                   // Init CosLatScaleLon if not already done to avoid div by zero etc..
-    RealGPSDeltaTime = TimestampNewGPSdata - LastTimestampNewGPSdata;           // RealGPSDeltaTime in ms! NOT us!
+    if (CosLatScaleLon == 0.0f) GPS_calc_longitude_scaling();                       // Init CosLatScaleLon if not already done to avoid div by zero etc..
+    RealGPSDeltaTime = TimestampNewGPSdata - LastTimestampNewGPSdata;               // RealGPSDeltaTime in ms! NOT us!
     LastTimestampNewGPSdata = TimestampNewGPSdata;
-    if (RealGPSDeltaTime != 0)                                                  // New GPS Data?
+    if (RealGPSDeltaTime != 0)                                                      // New GPS Data?
     {
-        INSusable = false;                                                      // Set INS to ununsable in advance we will see later
-        if (RealGPSDeltaTime < 400)                                             // In Time? 2,5Hz-XXHz
+        INSusable = false;                                                          // Set INS to ununsable in advance we will see later
+        if (RealGPSDeltaTime < 400)                                                 // In Time? 2,5Hz-XXHz
         {
-            INSusable = true;                                                   // INS is alive
-            gpsHz = 1000.0f/(float)RealGPSDeltaTime;                            // Set GPS Hz, try to filter below
-            if (RealGPSDeltaTime >  80 && RealGPSDeltaTime < 120) gpsHz = 10.0f;// 10Hz Data 100ms filter out timejitter
-            if (RealGPSDeltaTime > 180 && RealGPSDeltaTime < 220) gpsHz = 5.0f; //  5Hz Data 200ms
-            if (RealGPSDeltaTime > 230 && RealGPSDeltaTime < 270) gpsHz = 4.0f; //  4Hz Data 250ms
+            INSusable = true;                                                       // INS is alive
+            gpsHz = 1000.0f/(float)RealGPSDeltaTime;                                // Set GPS Hz, try to filter below
+            if (RealGPSDeltaTime >  80 && RealGPSDeltaTime < 120) gpsHz = 10.0f;    // 10Hz Data 100ms filter out timejitter
+            if (RealGPSDeltaTime > 180 && RealGPSDeltaTime < 220) gpsHz = 5.0f;     //  5Hz Data 200ms
+            if (RealGPSDeltaTime > 230 && RealGPSDeltaTime < 270) gpsHz = 4.0f;     //  4Hz Data 250ms
             tmp0 = MagicEarthNumber * gpsHz;
             Real_GPS_speed[LON] = (float)(Real_GPS_coord[LON] - Last_Real_GPS_coord[LON]) * tmp0 * CosLatScaleLon ; // cm/s
             Real_GPS_speed[LAT] = (float)(Real_GPS_coord[LAT] - Last_Real_GPS_coord[LAT]) * tmp0;                   // cm/s
@@ -418,30 +403,67 @@ static void GPS_calc_velocity(void)                                             
             {
                 Last_Real_GPS_coord[i] = Real_GPS_coord[i];
                 actual_speed[i]        = actual_speed[i] * cfg.gps_ins_vel + Real_GPS_speed[i] * (1.0f - cfg.gps_ins_vel); // CF: GPS Correction
-                GPSmovementAdder[i]    = 0;                                     // This float accumulates the tiny acc movements between GPS reads
+                GPSmovementAdder[i]    = 0;                                         // This float accumulates the tiny acc movements between GPS reads
+                RealSpeedHistory[i][SpedLstPtr] = (int16_t)Real_GPS_speed[i];
             }
+            SpedLstPtr ++;
+            if (SpedLstPtr == 5) SpedLstPtr = 0;
+            sum[LAT] = 0;
+            sum[LON] = 0;
+            for (i = 0; i < 5; i++)
+            {
+                sum[LAT] += RealSpeedHistory[LAT][i];
+                sum[LON] += RealSpeedHistory[LON][i];
+            }
+            tmp0 = (float)sum[LAT] * 0.2f;                                          // / 5;
+            tmp1 = (float)sum[LON] * 0.2f;                                          // / 5;
+            RealAverageGPSSpeed[LAT] = (int16_t)tmp0;
+            RealAverageGPSSpeed[LON] = (int16_t)tmp1;
+            RealAverageGPSTotalSpeed = (uint16_t)sqrt(tmp0 * tmp0 + tmp1 * tmp1);   // This is better than GPS speed because we only want XY and not XYZ Speed
         }
-    }                                                                           // End of X Hz Loop
+    }                                                                               // End of X Hz Loop
 
-    if ((millis() - TimestampNewGPSdata) > 500) INSusable = false;              // INS is NOT OK, too long (500ms) no correction
+    if ((millis() - TimestampNewGPSdata) > 500) INSusable = false;                  // INS is NOT OK, too long (500ms) no correction
 
     if (INSusable)
     {
         for (i = 0; i < 2; i++)
         {
-            GPSmovementAdder[i] = GPSmovementAdder[i] + (actual_speed[i] * ACCDeltaTimeINS * OneCmTo[i]);
-            GPS_coord[i]        = Real_GPS_coord[i] + (int32_t)GPSmovementAdder[i];// Bridge the time between GPS reads with acc data
+            GPSmovementAdder[i] = GPSmovementAdder[i] + actual_speed[i] * ACCDeltaTimeINS * OneCmTo[i];
+            GPS_coord[i]        = Real_GPS_coord[i] + GPSmovementAdder[i];          // Bridge the time between GPS reads with acc data
         }
     }
     else
     {
-        GPS_reset_nav();                                                        // Ins is fucked, reset stuff
+        GPS_reset_nav();                                                            // Ins is fucked, reset stuff
+        RealAverageGPSTotalSpeed   = 0;		                                          // Reset the Rest
         for (i = 0; i < 2; i++)
         {
+            GPS_coord[i]           = Real_GPS_coord[i];
             Last_Real_GPS_coord[i] = Real_GPS_coord[i];
+            actual_speed[i]        = 0;
             GPSmovementAdder[i]    = 0;
+            RealAverageGPSSpeed[i] = 0;
+        }
+        for (i = 0; i < 5; i++)
+        {
+            RealSpeedHistory[LAT][i] = 0;
+            RealSpeedHistory[LON][i] = 0;
         }
     }
+    
+    if (cfg.gps_debug == 1) // Print Out some Debug values here
+    {
+        debug[0] = RealAverageGPSTotalSpeed;
+        debug[1] = RealAverageGPSSpeed[LAT]; 
+        debug[2] = RealAverageGPSSpeed[LON];
+    }    
+}
+
+static void ProjectGPStoWP(float time)                                             // Projects current GPS ahead current movement (gathered over last second)
+{
+    uint8_t i;
+    for (i = 0; i < 2; i++) GPS_WP[i] = Real_GPS_coord[i] + (int32_t)((float)RealAverageGPSSpeed[i] * time * OneCmTo[i]);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -449,55 +471,39 @@ static void GPS_calc_velocity(void)                                             
 static void GPS_distance_cm_bearing(int32_t * lat1, int32_t * lon1, int32_t * lat2, int32_t * lon2, uint32_t * dist, int32_t * bearing)
 {
     float dLatsq, dLonsq, dLat, dLon;
-    if (*lat2 != 0 && *lat1 != 0 && *lon2 != 0 && *lon1 != 0)                   // Crashpilot Errorcheck
+    if (*lat2 != 0 && *lat1 != 0 && *lon2 != 0 && *lon1 != 0)                      // Crashpilot Errorcheck
     {
         if (CosLatScaleLon == 0.0f) GPS_calc_longitude_scaling();
-        dLat = *lat2 - *lat1;                                                   // difference of latitude in 1/10 000 000 degrees
+        dLat = *lat2 - *lat1;                                                      // difference of latitude in 1/10 000 000 degrees
         dLon = *lon2 - *lon1;
-        dLon = dLon * CosLatScaleLon;                                           // dlon scale
-        dLatsq = dLat * dLat;                                                   // square values
+        dLon = dLon * CosLatScaleLon;                                              // dlon scale
+        dLatsq = dLat * dLat;                                                      // square values
         dLonsq = dLon * dLon;
-        *dist = sqrtf(dLatsq + dLonsq) * MagicEarthNumber;                      // dist in cm
-        *bearing = 9000.0f + (int32_t)constrain(atan2f(-dLat, dLon) * 18000.0f / M_PI, -18000.0f, 18000.0f);// Convert the output radians to 100xdeg
+        *dist = sqrtf(dLatsq + dLonsq) * MagicEarthNumber;                         // dist in cm
+        *bearing = 9000.0f + atan2f(-dLat, dLon) * 5729.57795f;                    // Convert the output radians to 100xdeg
         if (*bearing < 0) *bearing += 36000;
     }
-    else                                                                        // Error!
+    else                                                                           // Error!
     {
         *dist = 0;
         *bearing = 0;
     }
 }
 
-/*
-void UBLOX::Heading(int32_t *lat1, int32_t *lon1, int32_t *lat2, int32_t *lon2,float *bearing){
-  dLon = ToRad((*lon2 - *lon1)/10000000.0);
-  lat1_f = ToRad(*lat1/10000000.0);
-  lat2_f= ToRad(*lat2/10000000.0);
-
-  y = sin(dLon)*cos(lat2_f);
-  x = cos(lat1_f)*sin(lat2_f)-sin(lat1_f)*cos(lat2_f)*cos(dLon);
-  *bearing = ToDeg(fastAtan2(y,x));
-  if(*bearing < 0){
-    *bearing += 360;
-  }
-
-}
-*/
-
 ////////////////////////////////////////////////////////////////////////////////////
 // Calculate a location error between two gps coordinates. Crashpilot distance error in CM now!
 static void GPS_calc_location_error(int32_t *target_lat, int32_t *target_lng, int32_t *gps_lat, int32_t *gps_lng)
 {
-    if (CosLatScaleLon == 0.0f) GPS_calc_longitude_scaling();                   // Just in case scaling isn't done
+    if (CosLatScaleLon == 0.0f) GPS_calc_longitude_scaling();                               // Just in case scaling isn't done
     if (*target_lng != 0 && *target_lat != 0 && *gps_lng != 0 && *gps_lat != 0)
     {
-        LocError[LON] = (float)(*target_lng - *gps_lng) * MagicEarthNumber * CosLatScaleLon; // X Error in cm not lon!
-        LocError[LAT] = (float)(*target_lat - *gps_lat) * MagicEarthNumber;                  // Y Error in cm not lat!
+        error[LON] = (float)(*target_lng - *gps_lng) * MagicEarthNumber * CosLatScaleLon;   // X Error in cm not lon!
+        error[LAT] = (float)(*target_lat - *gps_lat) * MagicEarthNumber;                    // Y Error in cm not lat!
     }
     else
     {
-        LocError[LON] = 0;
-        LocError[LAT] = 0;
+        error[LON] = 0;
+        error[LAT] = 0;
     }
 }
 
@@ -528,15 +534,15 @@ void GPS_set_next_wp(int32_t *lat, int32_t *lon)
         PH1stRun = true;
         break;
     case NAV_MODE_RTL:
-        WP_Fastcorner = false;                                                  // This means: Slow down when approaching WP
+        WP_Fastcorner = false;                                            // This means: Slow down when approaching WP
         break;
     case NAV_MODE_WP:
-        tmp0 = (float)(WP_Target_Alt - EstAlt);                                 // tmp0 = hightdifference in cm.  + is up
-        tmp1 = ((float)wp_distance / (float)cfg.nav_speed_max) * 1.2f;          // tmp1 = Estimated Traveltime + 20% // Div Zero not possible
-        if (tmp1 == 0.0f) WP_Desired_Climbrate = 0;                             // Avoid Div Zero
-        else WP_Desired_Climbrate = tmp0 / tmp1;                                // Climbrate in cm/s
+        tmp0 = (float)(WP_Target_Alt - EstAlt);                           // tmp0 = hightdifference in cm.  + is up
+        tmp1 = ((float)wp_distance / (float)cfg.nav_speed_max) * 1.2f;    // tmp1 = Estimated Traveltime + 20% // Div Zero not possible
+        if (tmp1 == 0.0f) WP_Desired_Climbrate = 0;                       // Avoid Div Zero
+        else WP_Desired_Climbrate = tmp0 / tmp1;                         // Climbrate in cm/s
         break;
-    case NAV_MODE_CIRCLE:                                                       // Set some constants
+    case NAV_MODE_CIRCLE:                                                 // Set some constants
 //        Maybe some shit here later
 //        Project a gps point x cm ahead the copter nose will look like this:
 //        Project[LON] = Current[LON]+ (int32_t) ((Project_forward_cm * sin_yaw_y) * OneCmTo[LON]);
@@ -552,103 +558,64 @@ void GPS_set_next_wp(int32_t *lat, int32_t *lon)
 // VelEast;   // 1 // VelNorth;  // 0
 // 0 is NICK part  // 1 is ROLL part
 // actual_speed[GPS_Y] = VelNorth;
-static void GPS_calc_posholdCrashpilot(bool overspeed, bool useabsolute)
+static void GPS_calc_posholdCrashpilot(bool overspeed)
 {
     uint8_t axis;
-    float   p, d, target_speed, rate_error, tmp0, tmp1;
-    float   maxbank100new = maxbank100;
-
-    if (overspeed)
+    float d, target_speed, maxbank100new, tmp0, tmp1;
+  
+    for (axis = 0; axis < 2; axis++)
     {
-        if (GPS_speed != 0)
+        if (actual_speed[axis] !=0 && overspeed)                                   // Calculate tiltanglerestriction at overspeed based on totalspeed
         {
-            tmp0 = (float)cfg.gps_ph_settlespeed / (float)GPS_speed;
-            tmp1 = (float)cfg.gps_ph_minbrakeangle * 0.01f;                     // this is the minimal break percentage
-            tmp0 = constrain(sqrt(abs(tmp0)), tmp1, 1.0f);                      // 1 - 100%
-            maxbank100new = (float)maxbankbrake100 * tmp0;
+            tmp0 = (float)cfg.gps_ph_targetsqrt / actual_speed[axis];              // do something like sqrt(10/x) 10 is the unproblematic speed for max tiltangle
+            tmp1 = constrain(sqrtf(abs(tmp0)), MinAngleFactor, 1.0f);              // tmp1 contains now the factor for maximal angle
+            maxbank100new = tmp1 * (float)maxbank100;
         }
-        else
-            maxbank100new = maxbank100;
-    }
-
-    for (axis = 0; axis < 2; axis++)
-    {
-        if (useabsolute && !overspeed)
-            target_speed = get_P(LocError[axis], &posholdPID_PARAM);            // Calculate Rate Error
-        else
-            target_speed = 0;
-
-        rate_error = target_speed - actual_speed[axis];
-        rate_error = constrain(rate_error, -1000, 1000);                        // +- 10m/s
-        p          = get_P(rate_error,                                 &poshold_ratePID_PARAM);
-        d          = get_D(rate_error, &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
-        d = constrain(d, -2000, 2000);
-        nav[axis] = constrain(p + d,-maxbank100new, maxbank100new);
-    }
-}
-
-
-/*
-static void GPS_calc_posholdCrashpilot(bool overspeed, bool useabsolute)
-{
-    uint8_t axis;
-    float   p, d, target_speed, rate_error, tmp0;
-    float   maxbank100new = maxbank100;
-
-    for (axis = 0; axis < 2; axis++)
-    {
-        if (useabsolute)
-            target_speed = get_P(LocError[axis], &posholdPID_PARAM);            // Calculate Rate Error
-        else
-            target_speed = 0;
+        else maxbank100new = maxbank100;                                           // dont restrict further at 0 speed
 
         if (overspeed)
-        {
-            target_speed = 0;                                                   // Neutralize absolut Position if accidently choosen
-            if (actual_speed[axis] !=0)
-            {
-                tmp0 = abs(cfg.gps_ph_settlespeed / actual_speed[axis]);
-                tmp0 = constrain(tmp0, 0.01f, 1.0f);                            // 1 - 100%
-                maxbank100new = (float)maxbank100 * tmp0;
-            }
-            else  maxbank100new = maxbank100;
-        }
-        rate_error = target_speed - actual_speed[axis];
-        rate_error = constrain(rate_error, -1000, 1000);                        // +- 10m/s
-        p          = get_P(rate_error,                                 &poshold_ratePID_PARAM);
-        d          = get_D(rate_error, &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
-        d = constrain(d, -2000, 2000);
-        nav[axis] = constrain(p + d,-maxbank100new, maxbank100new);
+            target_speed = 0;                                                      // Relative PH on Overspeed
+        else
+            target_speed = get_P(error[axis], &posholdPID_PARAM);                  // Calculate Rate Error
+        
+        rate_error[axis] = target_speed - actual_speed[axis];
+        rate_error[axis] = constrain(rate_error[axis], -1000, 1000);               // +- 10m/s
+        nav[axis]        = get_P(rate_error[axis],                                 &poshold_ratePID_PARAM) +  //try negative for I? Because it just works like shit
+                           get_I(rate_error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
+        d = get_D(rate_error[axis], &dTnav, &poshold_ratePID[axis], &poshold_ratePID_PARAM);
+        if (abs(actual_speed[axis]) < 50) d = 0;                                   // get rid of noise
+        else d = constrain(d, -2000, 2000);
+        nav[axis]        = constrain(nav[axis] + d, -maxbank100new, maxbank100new);
+        navPID[axis].integrator = poshold_ratePID[axis].integrator;                // "I" kept it for compat.
     }
 }
-*/
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Calculate the desired nav_lat and nav_lon for distance flying such as RTH
 static void GPS_calc_nav_rate(int16_t max_speed)
 {
-    float trig[2], rate_error;
+    float trig[2];
     float temp;
     uint8_t axis;
-    if (abs(wrap_18000(target_bearing - original_target_bearing)) < 4500)       // If we are too far off or too close we don't do track following
+    if (abs(wrap_18000(target_bearing - original_target_bearing)) < 4500)            // If we are too far off or too close we don't do track following
     {
         float temp = (target_bearing - original_target_bearing) * RADX100;
-        crosstrack_error = sinf(temp) * wp_distance;                            // Meters we are off track line
+        crosstrack_error = sinf(temp) * wp_distance;                                 // Meters we are off track line
         nav_bearing = target_bearing + constrain(crosstrack_error, -3000, 3000);
         nav_bearing = wrap_36000(nav_bearing);
     }
     else nav_bearing = target_bearing;
-    temp = (float)(9000l - nav_bearing) * RADX100;                              // nav_bearing includes crosstrack
+    temp = (9000l - nav_bearing) * RADX100;                                          // nav_bearing includes crosstrack
     trig[GPS_X] = cosf(temp);
     trig[GPS_Y] = sinf(temp);
     for (axis = 0; axis < 2; axis++)
     {
-        rate_error = (trig[axis] * (float)max_speed) - actual_speed[axis];
-        rate_error = constrain(rate_error, -1000, 1000);
-        nav[axis]  = get_P(rate_error,                        &navPID_PARAM) +  // P + I + D
-                     get_I(rate_error, &dTnav, &navPID[axis], &navPID_PARAM) +
-                     get_D(rate_error, &dTnav, &navPID[axis], &navPID_PARAM);
-        nav[axis]  = constrain(nav[axis], -maxbank100, maxbank100);
+        rate_error[axis] = (trig[axis] * (float)max_speed) - actual_speed[axis];
+        rate_error[axis] = constrain(rate_error[axis], -1000, 1000);
+        nav[axis] = get_P(rate_error[axis],                        &navPID_PARAM) +  // P + I + D
+                    get_I(rate_error[axis], &dTnav, &navPID[axis], &navPID_PARAM) +
+                    get_D(rate_error[axis], &dTnav, &navPID[axis], &navPID_PARAM);
+        nav[axis] = constrain(nav[axis], -maxbank100, maxbank100);
         poshold_ratePID[axis].integrator = navPID[axis].integrator;
     }
 }
@@ -656,38 +623,38 @@ static void GPS_calc_nav_rate(int16_t max_speed)
 static int16_t GPS_calc_desired_speed(void)
 {
     int16_t max_speed = cfg.nav_speed_max;
-    if (!WP_Fastcorner) max_speed = min(max_speed, wp_distance / 3);            // Arducopter 2.8.1 do div by 3
+    if (!WP_Fastcorner) max_speed = min(max_speed, wp_distance / 3);        // Arducopter 2.8.1 do div by 3
     else max_speed = min(max_speed, wp_distance);
     if (max_speed > waypoint_speed_gov)
     {
-        waypoint_speed_gov += (100.0f * dTnav);                                 // increase speed
+        waypoint_speed_gov += (100.0f * dTnav);                             // increase speed
         max_speed = waypoint_speed_gov;
     }
-    max_speed = constrain(max_speed, cfg.nav_speed_min, cfg.nav_speed_max);     // Put output in desired range
+    max_speed = constrain(max_speed, cfg.nav_speed_min, cfg.nav_speed_max); // Put output in desired range
     return max_speed;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
 // ***   GPS INIT   ***
 ////////////////////////////////////////////////////////////////////////////////////
-void gpsInit(uint32_t baudrate)                                                 // Called in Main
+void gpsInit(uint32_t baudrate)                               // Called in Main
 {
     uint8_t i;
     uint32_t timeout;
 
     GPS_set_pids();
     GPS_Present = 0;
-    delay(2000);                                                                // let it init
-    timeout = micros()+12000000;					                                      // 12 sec timeout
-    while (GPS_Present == 0)                                                    // Repeat while no GPS Data
+    delay(2000);                                                // let it init
+    timeout = micros()+10000000;					                      // 10 sec timeout
+    while (GPS_Present == 0)                                    // Repeat while no GPS Data
     {
-        if (micros()>timeout) break;                                            // Stop that after timeout
+        if (micros()>timeout) break;                              // Stop that after timeout
         uart2Init(baudrate, GPS_NewData, false);
-        switch (cfg.gps_type)  	                                                // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3, GPS_UBLOX_DUMB = 4
+        switch (cfg.gps_type)  	                                  // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3, GPS_UBLOX_DUMB = 4
         {
-        case 0:                                                                 // GPS_NMEA
+        case 0:                                                 // GPS_NMEA
             break;
-        case 1:                                                                 // GPS_UBLOX
+        case 1:                                                 // GPS_UBLOX
             for (i = 0; i < 5; i++)
             {
                 uart2ChangeBaud(init_speed[i]);
@@ -713,11 +680,11 @@ void gpsInit(uint32_t baudrate)                                                 
             for (i = 0; i < sizeof(ubloxInit); i++)
             {
                 delay(6);
-                uart2Write(ubloxInit[i]);                                       // send ubx init binary
+                uart2Write(ubloxInit[i]);                                      // send ubx init binary
             }
             break;
-        case 2:                                                                 // GPS_MTK16
-        case 3:                                                                 // GPS_MTK19
+        case 2:                                                            // GPS_MTK16
+        case 3:                                                            // GPS_MTK19
             for (i = 0; i < 5; i++)
             {
                 uart2ChangeBaud(init_speed[i]);
@@ -738,49 +705,48 @@ void gpsInit(uint32_t baudrate)                                                 
             delay(200);
             gpsPrint(MTK_WAAS_ON);
             break;
-        case 4:                                                                 // GPS_UBLOX_DUMB = 4
+        case 4:                                                             // GPS_UBLOX_DUMB = 4
             break;
         }
         delay(1000);
     }
-    if (GPS_Present) sensorsSet(SENSOR_GPS);                                    // Do we get Data? Is GPS present?
-    maxbank100      = (int16_t)cfg.gps_maxangle * 100;                               // Initialize some values here
-    maxbankbrake100 = (int16_t)cfg.gps_ph_brakemaxangle * 100;
-    if (maxbankbrake100 > maxbank100) maxbankbrake100 = maxbank100;
+    if (GPS_Present) sensorsSet(SENSOR_GPS);                                // Do we get Data? Is GPS present?
+    maxbank100     = (int16_t)cfg.gps_maxangle * 100;                       // Initialize some values here
+    MinAngleFactor = (float)cfg.gps_minanglepercent * 0.01f;
 }
 
 static void gpsPrint(const char *str)
 {
     while (*str)
     {
-        if (cfg.gps_type == 1) delay(6);                                        // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3,
+        if (cfg.gps_type == 1) delay(6);                 // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3,
         uart2Write(*str);
         str++;
     }
-    while (!uart2TransmitEmpty());                                              // wait to send all
+    while (!uart2TransmitEmpty());                       // wait to send all
     delay(30);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
 // ***   Utilities   ***
 ////////////////////////////////////////////////////////////////////////////////////
-void GPS_set_pids(void)                                                         // Get the relevant P I D values and set the PID controllers
+void GPS_set_pids(void)                                               // Get the relevant P I D values and set the PID controllers
 {
-#define POSHOLD_RATE_IMAX      20                                               // degrees
-    posholdPID_PARAM.kP        = (float)cfg.P8[PIDPOS]  /  100.0f;              // Original Scale
-    posholdPID_PARAM.kI        = (float)cfg.I8[PIDPOS]  /  100.0f;              // Not used but initialized
-    posholdPID_PARAM.kD        = (float)cfg.D8[PIDPOS]  / 1000.0f;              // Not used but initialized
-    posholdPID_PARAM.Imax      = POSHOLD_RATE_IMAX * 100;
+#define POSHOLD_RATE_IMAX      20                                     // degrees
+    posholdPID_PARAM.kP   = (float)cfg.P8[PIDPOS] /  100.0f;          // Original Scale
+    posholdPID_PARAM.kI   = (float)cfg.I8[PIDPOS] /  100.0f;          // Not used but initialized
+    posholdPID_PARAM.kD   =	(float)cfg.D8[PIDPOS] / 1000.0f;          // Not used but initialized
+    posholdPID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
 
-    poshold_ratePID_PARAM.kP   = (float)cfg.P8[PIDPOSR] /       5;              // Need more P
-    poshold_ratePID_PARAM.kI   = (float)cfg.I8[PIDPOSR] / 1000.0f;              // "I" is evil, leads to circeling
-    poshold_ratePID_PARAM.kD   = (float)cfg.D8[PIDPOSR] /  100.0f;              // Crashpilot needs bigger values, i think that is actually the real apm D scaling
+    poshold_ratePID_PARAM.kP = (float)cfg.P8[PIDPOSR] /       5;      // Need more P
+    poshold_ratePID_PARAM.kI = (float)cfg.I8[PIDPOSR] / 1000.0f;      // "I" is evil, leads to circeling
+    poshold_ratePID_PARAM.kD = (float)cfg.D8[PIDPOSR] /  100.0f;      // Crashpilot needs bigger values, i think that is actually the real apm D scaling
     poshold_ratePID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
  
-    navPID_PARAM.kP            = (float)cfg.P8[PIDNAVR] / 10.0f;
-    navPID_PARAM.kI            = (float)cfg.I8[PIDNAVR] / 100.0f;
-    navPID_PARAM.kD            = (float)cfg.D8[PIDNAVR] / 1000.0f;
-    navPID_PARAM.Imax          = POSHOLD_RATE_IMAX * 100;
+    navPID_PARAM.kP = (float)cfg.P8[PIDNAVR] / 10.0f;
+    navPID_PARAM.kI = (float)cfg.I8[PIDNAVR] / 100.0f;
+    navPID_PARAM.kD = (float)cfg.D8[PIDNAVR] / 1000.0f;
+    navPID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
 }
 
 static float get_P(float error, struct PID_PARAM_* pid)
@@ -797,14 +763,11 @@ static float get_I(float error, float* dt, struct PID_* pid, struct PID_PARAM_* 
 
 static float get_D(float input, float* dt, struct PID_* pid, struct PID_PARAM_* pid_param)
 {
-    float filter;
     pid->derivative = (input - pid->last_input) / *dt;
-    // Examples for _filter: "1 / ( 2 * PI * f_cut )"
-    // f_cut = 10 Hz -> filter = 15.9155e-3 // f_cut = 15 Hz -> filter = 10.6103e-3 // f_cut = 20 Hz -> filter =  7.9577e-3
-    // f_cut = 25 Hz -> filter =  6.3662e-3 // f_cut = 30 Hz -> filter =  5.3052e-3
-    filter = 7.9577e-3; // 20Hz
-//    filter = 15.9155e-3;  // 10 Hz
-//    filter = 2.6526e-3; // 60Hz
+    // Examples for _filter:
+    // f_cut = 10 Hz -> _filter = 15.9155e-3 // f_cut = 15 Hz -> _filter = 10.6103e-3 // f_cut = 20 Hz -> _filter =  7.9577e-3
+    // f_cut = 25 Hz -> _filter =  6.3662e-3 // f_cut = 30 Hz -> _filter =  5.3052e-3
+    float filter = 7.9577e-3;
     pid->derivative = pid->last_derivative + (*dt / (filter + *dt)) * (pid->derivative - pid->last_derivative);
     pid->last_input = input;
     pid->last_derivative = pid->derivative;
@@ -825,23 +788,21 @@ void GPS_reset_home_position(void)
         GPS_calc_longitude_scaling();
         GPS_home[LAT] = Real_GPS_coord[LAT];
         GPS_home[LON] = Real_GPS_coord[LON];
-        nav_takeoff_bearing = heading;                                          // save takeoff heading
+        nav_takeoff_bearing = heading;              // save takeoff heading
         // Set ground altitude
         f.GPS_FIX_HOME = 1;
     }
 }
 
-void GPS_reset_nav(void)                                                        // reset navigation (stop the navigation processor, and clear nav)
+void GPS_reset_nav(void)                                              //reset navigation (stop the navigation processor, and clear nav)
 {
     uint8_t i;
     for (i = 0; i < 2; i++)
     {
-        GPS_coord[i]      = Real_GPS_coord[i];                                  // Discard INS GPS pos and use the real
-        actual_speed[i]   = 0;
-        LocError[i]       = 0;
-        GPS_angle[i]      = 0;
-        nav_rated[i]      = 0;
-        nav[i]            = 0;
+        error[i]        = 0;
+        GPS_angle[i]    = 0;
+        nav_rated[i]    = 0;
+        nav[i]          = 0;
         reset_PID(&posholdPID[i]);
         reset_PID(&poshold_ratePID[i]);
         reset_PID(&navPID[i]);
@@ -849,9 +810,6 @@ void GPS_reset_nav(void)                                                        
     waypoint_speed_gov = (float)cfg.nav_speed_min;
     crosstrack_error = 0;
     WP_Fastcorner = false;
-    f.GPS_HOME_MODE = 0;
-    f.GPS_HOLD_MODE = 0;
-    nav_mode = NAV_MODE_NONE;
 }
 
 bool DoingGPS(void)
@@ -865,25 +823,25 @@ static bool check_missed_wp(void)
     float temp;
     temp = (float)(target_bearing - original_target_bearing);
     temp = wrap_18000(temp);
-    return (abs(temp) > 10000);                                                 // we passed the waypoint by 100 degrees
+    return (abs(temp) > 10000); // we passed the waypoint by 100 degrees
 }
 
-static void GPS_calc_longitude_scaling(void)
+static void GPS_calc_longitude_scaling()
 {
     float rads = ((float)Real_GPS_coord[LAT] / 10000000.0f) * RADX;
     rads = fabs(rads);
-    CosLatScaleLon = cosf(rads);                                                // can only be 0 at 90 degree, perhaps at the poles?
-    if (CosLatScaleLon == 0) CosLatScaleLon = 0.001745328f;                     // Avoid divzero (value is cos of 89.9 Degree)
-    OneCmTo[LAT] = 1.0f / MagicEarthNumber;                                     // Moves North one cm
-    OneCmTo[LON] = 1.0f / MagicEarthNumber / CosLatScaleLon;                    // Moves EAST  one cm
+    CosLatScaleLon = cosf(rads);                              // can only be 0 at 90 degree, perhaps at the poles?
+    if (CosLatScaleLon == 0) CosLatScaleLon = 0.001745328f;   // Avoid divzero (value is cos of 89.9 Degree)
+    OneCmTo[LAT] = 1.0f / MagicEarthNumber;                   // Moves North one cm
+    OneCmTo[LON] = 1.0f / MagicEarthNumber / CosLatScaleLon;  // Moves EAST  one cm
 }
 
 
-float wrap_18000(float value)
+float wrap_18000(float error)
 {
-    while (value >  18000) value -= 36000;
-    while (value < -18000) value += 36000;
-    return value;
+    while (error >  18000) error -= 36000;
+    while (error < -18000) error += 36000;
+    return error;
 }
 
 static int32_t wrap_36000(int32_t angle)
@@ -893,28 +851,28 @@ static int32_t wrap_36000(int32_t angle)
     return angle;
 }
 
-#define DIGIT_TO_VAL(_x)    (_x - '0')                                          // This code is used for parsing NMEA data
+#define DIGIT_TO_VAL(_x)    (_x - '0')                            // This code is used for parsing NMEA data
 uint32_t GPS_coord_to_degrees(char* s)
 {
     char *p, *q;
     uint8_t deg = 0, min = 0;
     unsigned int frac_min = 0;
     int i;
-    for (p = s; isdigit(*p); p++);                                              // scan for decimal point or end of field
+    for (p = s; isdigit(*p); p++);                                // scan for decimal point or end of field
     q = s;
-    while ((p - q) > 2)                                                         // convert degrees
+    while ((p - q) > 2)                                           // convert degrees
     {
         if (deg)
             deg *= 10;
         deg += DIGIT_TO_VAL(*q++);
     }
-    while (p > q)                                                               // convert minutes
+    while (p > q)                                                 // convert minutes
     {
         if (min)
             min *= 10;
         min += DIGIT_TO_VAL(*q++);
     }
-    if (*p == '.')                                                              // convert fractional minutes expect up to four digits, result is in ten-thousandths of a minute
+    if (*p == '.')                                                // convert fractional minutes expect up to four digits, result is in ten-thousandths of a minute
     {
         q = p + 1;
         for (i = 0; i < 4; i++)
@@ -928,7 +886,7 @@ uint32_t GPS_coord_to_degrees(char* s)
 }
 
 // helper functions
-static uint32_t grab_fields(char *src, uint8_t mult)                            // convert string to uint32
+static uint32_t grab_fields(char *src, uint8_t mult)             // convert string to uint32
 {
     uint8_t i;
     uint32_t tmp = 0;
@@ -947,7 +905,7 @@ static uint32_t grab_fields(char *src, uint8_t mult)                            
     return tmp;
 }
 
-static uint8_t hex_c(uint8_t n)                                                 // convert '0'..'9','A'..'F' to 0..15
+static uint8_t hex_c(uint8_t n)                                 // convert '0'..'9','A'..'F' to 0..15
 {
     n -= '0';
     if (n > 9) n -= 7;
@@ -955,60 +913,60 @@ static uint8_t hex_c(uint8_t n)                                                 
     return n;
 }
 
-static bool GPS_newFrame(char c)                                                // Crashpilot
+static bool GPS_newFrame(char c)                      // Crashpilot
 {
-    switch (cfg.gps_type) 	                                                    // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3, GPS_UBLOX_DUMB = 4
+    switch (cfg.gps_type) 	                          // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3, GPS_UBLOX_DUMB = 4
     {
-    case 0:                                                                     // NMEA
+    case 0:                                         // NMEA
         return GPS_NMEA_newFrame(c);
-    case 1:                                                                     // UBX
+    case 1:                                         // UBX
     case 4:
         return GPS_UBLOX_newFrame(c);
-    case 2:                                                                     // Dealing with old, faulty and new, correct binary protocol
+    case 2:                                         // Dealing with old, faulty and new, correct binary protocol
     case 3:
-        return GPS_MTK_newFrame(c);                                             // GPS_MTK_newFrame handles both 1.6 and 1.9 3drobotics nomenclature
+        return GPS_MTK_newFrame(c);                     // GPS_MTK_newFrame handles both 1.6 and 1.9 3drobotics nomenclature
     }
     return false;
 }
 
-static bool GPS_MTK_newFrame(uint8_t data)                                      // Crashpilot: This code is stupid but works
+static bool GPS_MTK_newFrame(uint8_t data)            // Crashpilot: This code is stupid but works
 {
-    static uint8_t pstep;                                                       // Parse Step
-    static uint8_t lastbyte;                                                    // Last Byte for Sync detection
-    static uint8_t LSLshifter;                                                  // Bitshiftvalue
+    static uint8_t pstep;                              // Parse Step
+    static uint8_t lastbyte;                           // Last Byte for Sync detection
+    static uint8_t LSLshifter;                         // Bitshiftvalue
     static uint8_t chkA,count;
-    static int32_t lat;                                                         // MTK Dataset
-    static int32_t lon;                                                         // MTK Dataset
-    static int32_t alt;                                                         // MTK Dataset
-    static int32_t grspeed;                                                     // MTK Dataset
-    static int32_t grcourse;                                                    // MTK Dataset
-    static uint8_t satn,fixtype;                                                // MTK Dataset
+    static int32_t lat;                                // MTK Dataset
+    static int32_t lon;                                // MTK Dataset
+    static int32_t alt;                                // MTK Dataset
+    static int32_t grspeed;                            // MTK Dataset
+    static int32_t grcourse;                           // MTK Dataset
+    static uint8_t satn,fixtype;                       // MTK Dataset
     int32_t tmp32;
-    uint8_t startbyte;                                                          // must be unsigned
+    uint8_t startbyte;                                 // must be unsigned
     bool parsed;
     parsed = false;
-    startbyte = 0;                                                              // Initialize to be on the safe side so casemachine will bail out on VERY unlikely error
+    startbyte = 0;                                     // Initialize to be on the safe side so casemachine will bail out on VERY unlikely error
     // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3,
-    if (cfg.gps_type == 2) startbyte = 0xd0;                                    // 3drobotics 1.6 FW and clones have $d0 preamblebyte no 1
-    if (cfg.gps_type == 3) startbyte = 0xd1;                                    // 3drobotics 1.9 FW and clones have $d1 preamblebyte no 1
-    if (pstep == 0 && data == 0xdd && lastbyte == startbyte) pstep = 100;       // Detect Sync "0xD1,0xDD" Only search for Sync when not already decoding
+    if (cfg.gps_type == 2) startbyte = 0xd0;           // 3drobotics 1.6 FW and clones have $d0 preamblebyte no 1
+    if (cfg.gps_type == 3) startbyte = 0xd1;           // 3drobotics 1.9 FW and clones have $d1 preamblebyte no 1
+    if (pstep == 0 && data == 0xdd && lastbyte == startbyte) pstep = 100; // Detect Sync "0xD1,0xDD" Only search for Sync when not already decoding
     lastbyte = data;
     switch(pstep)
     {
-    case 0:                                                                     // Special Case: Do Nothing
+    case 0:                                           // Special Case: Do Nothing
         break;
-    case 100:                                                                   // Special Case: Prepare next decoding run
-        pstep = 1;                                                              // Jump into decoding on next run
+    case 100:                                         // Special Case: Prepare next decoding run
+        pstep = 1;                                        // Jump into decoding on next run
         chkA = 0;
-        count = 0;                                                              // Reset values
+        count = 0;                              // Reset values
         break;
-    case 1:                                                                     // Payload Byte is always $20! (This is the first Byte after sync preamble)
-        if (data == 0x20) pstep++;                                              // Since it is always $20 we take it as extended, undocumented syncword "preamble3"
-        else pstep =0;                                                          // Error! Wait for sync
+    case 1:                                           // Payload Byte is always $20! (This is the first Byte after sync preamble)
+        if (data == 0x20) pstep++;                        // Since it is always $20 we take it as extended, undocumented syncword "preamble3"
+        else pstep =0;                                   // Error! Wait for sync
         chkA = chkA + data;
         count ++;
         break;
-    case 2:                                                                     // Read Dataset Latitude
+    case 2:                                           // Read Dataset Latitude
         lat = data;
         LSLshifter = 0;
         pstep++;
@@ -1020,11 +978,11 @@ static bool GPS_MTK_newFrame(uint8_t data)                                      
         tmp32 = data;
         tmp32 = tmp32<<LSLshifter;
         lat = lat | tmp32;
-        if (LSLshifter == 24) pstep++;                                          // FW APM TEST //    if (LSLshifter == 24){lat = lat * 10; pstep++;}
+        if (LSLshifter == 24) pstep++;                    // FW APM TEST //    if (LSLshifter == 24){lat = lat * 10; pstep++;}
         chkA = chkA + data;
         count ++;
         break;
-    case 4:                                                                     // Read Dataset Longitude
+    case 4:                                           // Read Dataset Longitude
         lon = data;
         LSLshifter = 0;
         pstep++;
@@ -1036,11 +994,11 @@ static bool GPS_MTK_newFrame(uint8_t data)                                      
         tmp32 = data;
         tmp32 = tmp32<<LSLshifter;
         lon = lon | tmp32;
-        if (LSLshifter == 24) pstep++;                                          // FW APM TEST //    if (LSLshifter == 24){lon = lon * 10; pstep++;}
+        if (LSLshifter == 24) pstep++;                    // FW APM TEST //    if (LSLshifter == 24){lon = lon * 10; pstep++;}
         chkA = chkA + data;
         count ++;
         break;
-    case 6:                                                                     // Read Dataset MSL Altitude
+    case 6:                                           // Read Dataset MSL Altitude
         alt = data;
         LSLshifter = 0;
         pstep++;
@@ -1054,13 +1012,13 @@ static bool GPS_MTK_newFrame(uint8_t data)                                      
         alt = alt | tmp32;
         if (LSLshifter == 24)
         {
-            alt = alt/100;                                                      // altitude in meter
+            alt = alt/100;    // altitude in meter
             pstep++;
         }
         chkA = chkA + data;
         count ++;
         break;
-    case 8:                                                                     // Read Dataset Ground Speed
+    case 8:                                           // Read Dataset Ground Speed
         grspeed = data;
         LSLshifter = 0;
         pstep++;
@@ -1076,7 +1034,7 @@ static bool GPS_MTK_newFrame(uint8_t data)                                      
         chkA = chkA + data;
         count ++;
         break;
-    case 10:                                                                    // Read Dataset Heading
+    case 10:                                          // Read Dataset Heading
         grcourse = data;
         LSLshifter = 0;
         pstep++;
@@ -1092,23 +1050,23 @@ static bool GPS_MTK_newFrame(uint8_t data)                                      
         chkA = chkA + data;
         count ++;
         break;
-    case 12:                                                                    // Read number of satellites in view
+    case 12:                                          // Read number of satellites in view
         satn = data;
         pstep++;
         chkA = chkA + data;
         count ++;
         break;
-    case 13:                                                                    // Read Fix Type
-        fixtype = data;                                                         // FIX_NONE = 1, FIX_2D = 2, FIX_3D = 3, FIX_2D_SBAS = 6, FIX_3D_SBAS = 7
+    case 13:                                          // Read Fix Type
+        fixtype = data;                                   // FIX_NONE = 1, FIX_2D = 2, FIX_3D = 3, FIX_2D_SBAS = 6, FIX_3D_SBAS = 7
         pstep++;
         chkA = chkA + data;
         count ++;
         break;
-    case 14:                                                                    // Wait for cheksum A
-        if (count == 33)                                                        // 33 = 0x21
+    case 14:                                          // Wait for cheksum A
+        if (count == 33)                                  // 33 = 0x21
         {
-            if (chkA == data) pstep++;                                          // ChecksumA reached. Correct? than go on
-            else pstep = 0;                                                     // Error?
+            if (chkA == data) pstep++;                      // ChecksumA reached. Correct? than go on
+            else pstep = 0;                                // Error?
         }
         else
         {
@@ -1116,23 +1074,23 @@ static bool GPS_MTK_newFrame(uint8_t data)                                      
             count ++;
         }
         break;
-    case 15:                                                                    // Dataset RDY !! Cheksum B omitted, ChkA was OK
+    case 15:                                          // Dataset RDY !! Cheksum B omitted, ChkA was OK
         if (fixtype > 1) f.GPS_FIX = true;
         else f.GPS_FIX = false;
-        if (startbyte == 0xd0)                                                  // We are dealing with old and faulty binary protocol here
+        if (startbyte == 0xd0)                            // We are dealing with old and faulty binary protocol here
         {
-            lat = lat * 10;                                                     // so we have to multiply by 10 lat and lon
+            lat = lat * 10;                                 // so we have to multiply by 10 lat and lon
             lon = lon * 10;
         }
-        Real_GPS_coord[LAT] = lat;                                              // GPS_read[LAT] = lat; GPS_read[LON] = lon;
+        Real_GPS_coord[LAT] = lat;                        // GPS_read[LAT] = lat; GPS_read[LON] = lon;
         Real_GPS_coord[LON] = lon;
-        GPS_altitude = alt;                                                     // i2c_dataset.altitude = alt;
-        GPS_speed = grspeed;                                                    // i2c_dataset.ground_speed = grspeed;
-        GPS_ground_course = grcourse;                                           // i2c_dataset.ground_course = grcourse;
-        GPS_numSat = satn;                                                      // i2c_dataset.status.numsats = satn;
-        GPS_Present = 1;                                                        // Naze: Show GPS is working
-        parsed = true;                                                          // RDY
-        pstep = 0;                                                              // Do nothing
+        GPS_altitude = alt;                               // i2c_dataset.altitude = alt;
+        GPS_speed = grspeed;                              // i2c_dataset.ground_speed = grspeed;
+        GPS_ground_course = grcourse;                     // i2c_dataset.ground_course = grcourse;
+        GPS_numSat = satn;                                // i2c_dataset.status.numsats = satn;
+        GPS_Present = 1;                                  // Naze: Show GPS is working
+        parsed = true;                                    // RDY
+        pstep = 0;                                        // Do nothing
         break;
     }
     return parsed;
@@ -1140,7 +1098,7 @@ static bool GPS_MTK_newFrame(uint8_t data)                                      
 
 #define FRAME_GGA  1
 #define FRAME_RMC  2
-static bool GPS_NMEA_newFrame(char c)
+static bool GPS_NMEA_newFrame(char c)                 //mwii1320
 {
     uint8_t frameOK = 0;
     static uint8_t param = 0, offset = 0, parity = 0;
@@ -1156,7 +1114,7 @@ static bool GPS_NMEA_newFrame(char c)
     else if (c == ',' || c == '*')
     {
         string[offset] = 0;
-        if (param == 0)                                                         // frame identification
+        if (param == 0)   //frame identification
         {
             frame = 0;
             if (string[0] == 'G' && string[1] == 'P' && string[2] == 'G' && string[3] == 'G' && string[4] == 'A') frame = FRAME_GGA;
@@ -1184,18 +1142,18 @@ static bool GPS_NMEA_newFrame(char c)
             }
             else if (param == 9)
             {
-                GPS_altitude = grab_fields(string,0);                           // altitude in meters added by Mis
+                GPS_altitude = grab_fields(string,0);   // altitude in meters added by Mis
             }
         }
         else if (frame == FRAME_RMC)
         {
             if      (param == 7)
             {
-                GPS_speed = ((uint32_t)grab_fields(string,1)*5144L)/1000L;      // gps speed in cm/s will be used for navigation
+                GPS_speed = ((uint32_t)grab_fields(string,1)*5144L)/1000L;   //gps speed in cm/s will be used for navigation
             }
             else if (param == 8)
             {
-                GPS_ground_course = grab_fields(string,1);                      // ground course deg*10
+                GPS_ground_course = grab_fields(string,1);    //ground course deg*10
             }
         }
         param++;
@@ -1312,18 +1270,18 @@ enum
     NAV_STATUS_FIX_VALID = 1
 } ubx_nav_status_bits;
 
-static uint8_t _ck_a;                                                           // Packet checksum accumulators
+static uint8_t _ck_a;                    // Packet checksum accumulators
 static uint8_t _ck_b;
-static uint8_t _step;                                                           // State machine state
+static uint8_t _step;                    // State machine state
 static uint8_t _msg_id;
 static uint16_t _payload_length;
 static uint16_t _payload_counter;
-static uint8_t _class;                                                          //  static bool next_fix;
+static uint8_t _class;                   //  static bool next_fix;
 static uint8_t _fix_ok;
 
-static union                                                                    // Receive buffer
+static union                             // Receive buffer
 {
-    ubx_nav_posllh posllh;                                                      // ubx_nav_status status;
+    ubx_nav_posllh posllh;                 // ubx_nav_status status;
     ubx_nav_solution solution;
     ubx_nav_velned velned;
     uint8_t bytes[64];
@@ -1358,31 +1316,31 @@ static bool GPS_UBLOX_newFrame(uint8_t data)
     case 2:
         _step++;
         _class = data;
-        _ck_b = _ck_a = data;                                                   // reset the checksum accumulators
+        _ck_b = _ck_a = data;                // reset the checksum accumulators
         break;
     case 3:
         _step++;
-        _ck_b += (_ck_a += data);                                               // checksum byte
+        _ck_b += (_ck_a += data);            // checksum byte
         _msg_id = data;
         break;
     case 4:
         _step++;
-        _ck_b += (_ck_a += data);                                               // checksum byte
-        _payload_length = data;                                                 // payload length low byte
+        _ck_b += (_ck_a += data);           // checksum byte
+        _payload_length = data;             // payload length low byte
         break;
     case 5:
         _step++;
-        _ck_b += (_ck_a += data);                                               // checksum byte
+        _ck_b += (_ck_a += data);           // checksum byte
         _payload_length += (uint16_t)(data<<8);
         if (_payload_length > 512)
         {
             _payload_length = 0;
             _step = 0;
         }
-        _payload_counter = 0;                                                   // prepare to receive payload
+        _payload_counter = 0;               // prepare to receive payload
         break;
     case 6:
-        _ck_b += (_ck_a += data);                                               // checksum byte
+        _ck_b += (_ck_a += data);           // checksum byte
         if (_payload_counter < sizeof(_buffer))
         {
             _buffer.bytes[_payload_counter] = data;
@@ -1392,11 +1350,11 @@ static bool GPS_UBLOX_newFrame(uint8_t data)
         break;
     case 7:
         _step++;
-        if (_ck_a != data) _step = 0;                                           // bad checksum
+        if (_ck_a != data) _step = 0;      // bad checksum
         break;
     case 8:
         _step = 0;
-        if (_ck_b != data)  break;                                              // bad checksum
+        if (_ck_b != data)  break;         // bad checksum
         GPS_Present = 1;
         if (UBLOX_parse_gps())
         {
@@ -1415,10 +1373,10 @@ bool UBLOX_parse_gps(void)
         {
             Real_GPS_coord[LON] = _buffer.posllh.longitude;
             Real_GPS_coord[LAT] = _buffer.posllh.latitude;
-            GPS_altitude        = _buffer.posllh.altitude_msl / 1000;           //alt in m
+            GPS_altitude        = _buffer.posllh.altitude_msl / 1000;      //alt in m
         }
         f.GPS_FIX = _fix_ok;
-        return true;                                                            // POSLLH message received, allow blink GUI icon and LED
+        return true;        // POSLLH message received, allow blink GUI icon and LED
         break;
     case MSG_SOL:
         _fix_ok = 0;
@@ -1426,8 +1384,8 @@ bool UBLOX_parse_gps(void)
         GPS_numSat = _buffer.solution.satellites;
         break;
     case MSG_VELNED:
-        GPS_speed         = _buffer.velned.speed_2d;                            // cm/s
-        GPS_ground_course = (uint16_t)(_buffer.velned.heading_2d / 10000);      // Heading 2D deg * 100000 rescaled to deg * 10
+        GPS_speed         = _buffer.velned.speed_2d;  // cm/s
+        GPS_ground_course = (uint16_t)(_buffer.velned.heading_2d / 10000);  // Heading 2D deg * 100000 rescaled to deg * 10
         break;
     default:
         break;
@@ -1436,12 +1394,6 @@ bool UBLOX_parse_gps(void)
 }
 
 /*
-static void ProjectGPStoWP(float time)                                              // Projects current GPS ahead current movement (gathered over last second)
-{
-    uint8_t i;
-    for (i = 0; i < 2; i++) GPS_WP[i] = Real_GPS_coord[i] + (int32_t)((float)RealAverageGPSSpeed[i] * time * OneCmTo[i]);
-}
-
 int16_t RCDeadband(int16_t rcvalue, uint8_t rcdead)
 {
     if (abs(rcvalue) < rcdead) rcvalue = 0;

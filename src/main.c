@@ -74,10 +74,20 @@ int main(void)
 
     NumberOfMotors = mixerInit();          // this will set useServo var depending on mixer type
     // when using airplane/wing mixer, servo/motor outputs are remapped
-    if (cfg.mixerConfiguration == MULTITYPE_AIRPLANE || cfg.mixerConfiguration == MULTITYPE_FLYING_WING)
-        pwm_params.airplane = true;
+    if (
+        cfg.mixerConfiguration == MULTITYPE_AIRPLANE || 
+        cfg.mixerConfiguration == MULTITYPE_FLYING_WING ||
+#ifdef DEFINED_FW_DRAG
+        cfg.mixerConfiguration == MULTITYPE_FW_DRAG ||
+#endif
+#ifdef DEFINED_TILTROTOR
+        cfg.mixerConfiguration == MULTITYPE_TILTROTOR
+#endif
+    )
+        cfg.airplane = true; // @Johannes
     else
-        pwm_params.airplane = false;
+        cfg.airplane = false; // @Johannes
+
     pwm_params.useUART = feature(FEATURE_GPS) || feature(FEATURE_SPEKTRUM); // spektrum support uses UART too
     pwm_params.usePPM = feature(FEATURE_PPM);
     pwm_params.enableInput = !feature(FEATURE_SPEKTRUM); // disable inputs if using spektrum
@@ -97,18 +107,24 @@ int main(void)
         switch(cfg.snr_type)                  // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
         {
         case 0:
-        case 3:
             if (NumberOfMotors < 5) pwm_params.usePWM56 = true; // Only do this with 4 Motors or less
             else pwm_params.usePWM56 = false; // Redundant
             break;
         case 1:
-        case 4:
             if (feature(FEATURE_PPM)) pwm_params.useRC78 = true; // ToDo: We should check for max motornumbers as well here
             else pwm_params.useRC78 = false;  // Redundant just to keep it indep. from the "falseblock" above
             break;
         case 2:
             pwm_params.useRC78  = false;      // Redundant
             pwm_params.usePWM56 = false;      // Redundant
+            break;
+        case 3:
+            if (NumberOfMotors < 5) pwm_params.usePWM56 = true;
+            else pwm_params.usePWM56 = false; // Redundant
+            break;
+        case 4:
+            if (feature(FEATURE_PPM)) pwm_params.useRC78 = true;
+            else pwm_params.useRC78  = false; // Redundant
             break;
         }
     }
@@ -156,15 +172,19 @@ int main(void)
             switch(cfg.snr_type)           // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
             {
             case 0:
-            case 3:
                 if (NumberOfMotors < 5) Sonar_init();
                 break;
             case 1:
-            case 4:
                 if (feature(FEATURE_PPM)) Sonar_init();
                 break;
             case 2:
                 Sonar_init();
+                break;
+            case 3:
+                if (NumberOfMotors < 5) Sonar_init();
+                break;
+            case 4:
+                if (feature(FEATURE_PPM)) Sonar_init();
                 break;
             }
         }

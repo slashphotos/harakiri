@@ -24,6 +24,9 @@
 #define MSP_BOXNAMES             116    //out message         the aux switch names
 #define MSP_PIDNAMES             117    //out message         the PID names
 #define MSP_WP                   118    //out message         get a WP, WP# is in the payload, returns (WP#, lat, lon, alt, flags) WP#0-home, WP#16-poshold
+// new @Johannes based of MultiWii V2.21
+#define MSP_BOXIDS               119   //out message         get the permanent IDs associated to BOXes
+#define MSP_SERVO_CONF           120   //out message         read Servo settings
 
 #define MSP_SET_RAW_RC           200    //in message          8 rc chan
 #define MSP_SET_RAW_GPS          201    //in message          fix, numsat, lat, lon, alt, speed
@@ -35,6 +38,14 @@
 #define MSP_SET_MISC             207    //in message          powermeter trig + 8 free for future use
 #define MSP_RESET_CONF           208    //in message          no param
 #define MSP_WP_SET               209    //in message          sets a given WP (WP#,lat, lon, alt, flags)
+// new @Johannes based of MultiWii V2.21
+#define MSP_SET_WP               209   //in message          sets a given WP (WP#,lat, lon, alt, flags)
+#define MSP_SELECT_SETTING       210   //in message          Select Setting Number (0-2)
+#define MSP_SET_HEAD             211   //in message          define a new heading hold direction
+#define MSP_SET_SERVO_CONF       212   //in message          set Servo settings
+#define MSP_SET_MOTOR            214   //in message          PropBalance function
+
+#define MSP_BIND                 240   //in message          no param
 
 #define MSP_EEPROM_WRITE         250    //in message          no param
 
@@ -84,7 +95,7 @@ static const char pidnames[] =
 
 static uint8_t checksum, indRX, inBuf[INBUF_SIZE];
 static uint8_t cmdMSP;
-// static bool guiConnected = false;
+static bool guiConnected = false;
 uint8_t cliMode = 0;                                    // signal that we're in cli mode
 
 void serialize32(uint32_t a)
@@ -170,6 +181,16 @@ void serializeNames(const char *s)
     const char *c;
     for (c = s; *c; c++)
         serialize8(*c);
+}
+
+void  s_struct(uint8_t *cb,uint8_t siz) {
+  headSerialReply(siz);
+  while(siz--) serialize8(*cb++);
+}
+
+void s_struct_w(uint8_t *cb,uint8_t siz) {
+ headSerialReply(0);
+  while(siz--) *cb++ = read8();
 }
 
 void serialInit(uint32_t baudrate)
@@ -286,8 +307,16 @@ static void evaluateCommand(void)
         headSerialReply(14);
         serialize8(f.GPS_FIX);
         serialize8(GPS_numSat);
-        serialize32(GPS_coord[LAT]);
-        serialize32(GPS_coord[LON]);
+        if (cfg.gps_debug == 1)
+        {
+            serialize32(Real_GPS_coord[LAT]);
+            serialize32(Real_GPS_coord[LON]);
+        }
+        else
+        {
+            serialize32(GPS_coord[LAT]);
+            serialize32(GPS_coord[LON]);
+        }
         serialize16(GPS_altitude);
         serialize16(GPS_speed);
         break;
@@ -306,7 +335,7 @@ static void evaluateCommand(void)
         break;
     case MSP_ALTITUDE:
         headSerialReply(4);
-        if (feature(FEATURE_PASS) || !GroundAltInitialized)
+        if (feature(FEATURE_PASS))
             serialize32(0);
         else
             serialize32(EstAlt);
@@ -406,7 +435,31 @@ static void evaluateCommand(void)
         headSerialReply(8);
         for (i = 0; i < 4; i++) serialize16(debug[i]);      // 4 variables are here for general monitoring purpose
         break;
-    case MSP_UID:	                                          // Additional commands that are not compatible with MultiWii
+
+        // new @Johannes based of MultiWii V2.21
+    case MSP_SERVO_CONF:  // @Johannes:
+        //s_struct((uint8_t*)&cfg.servoConf[0].min,56); // struct servo_conf_ is 7 bytes length: min:2 / max:2 / middle:2 / rate:1    ----     8 servo =>  8x7 = 56
+        headSerialReply(56);
+        for(i=0;i<8;i++) { // new servostructure Johannes: 
+            serialize16(cfg.servoConf[i].min);
+            serialize16(cfg.servoConf[i].max);
+            serialize16(cfg.servoConf[i].middle);
+            serialize8(cfg.servoConf[i].rate);
+        }
+        break;
+  case MSP_SET_SERVO_CONF: // @Johannes:
+        //s_struct_w((uint8_t*)&cfg.servoConf[0].min,56);	 doesn't work Johannes
+        headSerialReply(0);
+        for(i=0;i<8;i++) { // new servostructure Johannes: 
+            cfg.servoConf[i].min =  read16();
+            cfg.servoConf[i].max =  read16();
+            cfg.servoConf[i].middle =  read16();
+            cfg.servoConf[i].rate =  read8();
+        }
+        break;
+
+		// Additional commands that are not compatible with MultiWii
+	case MSP_UID:	                                          
         headSerialReply(12);
         serialize32(U_ID_0);
         serialize32(U_ID_1);
@@ -499,7 +552,7 @@ void serialCom(void)
             indRX = 0;
             checksum ^= c;
             c_state = HEADER_SIZE;      // the command is to follow
-//            guiConnected = true;
+            guiConnected = true;
         }
         else if (c_state == HEADER_SIZE)
         {

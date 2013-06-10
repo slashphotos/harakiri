@@ -128,16 +128,16 @@ extern uint16_t failsafeCnt; // external vars (ugh)
 static const uint8_t multiPPM[] =
 {
     PWM1  | TYPE_IP,    // PPM input
-    PWM9  | TYPE_M,     // Swap to servo if needed
-    PWM10 | TYPE_M,     // Swap to servo if needed
+    PWM9  | TYPE_M,     // Swap to servo if needed (Gimbal)                   // PWM56 ports for SONAR
+    PWM10 | TYPE_M,     // Swap to servo if needed (Gimbal)                   // PWM56 ports for SONAR
     PWM11 | TYPE_M,
     PWM12 | TYPE_M,
     PWM13 | TYPE_M,
     PWM14 | TYPE_M,
-    PWM5  | TYPE_M,     // Swap to servo if needed
-    PWM6  | TYPE_M,     // Swap to servo if needed
-    PWM7  | TYPE_M,     // Swap to servo if needed
-    PWM8  | TYPE_M,     // Swap to servo if needed
+    PWM5 | TYPE_M,      // Swap to servo if needed                             // RC5 ports for MONO_LED
+    PWM6 | TYPE_M,      // Swap to servo if needed                             // RC6 ports for MONO_LED
+    PWM7 | TYPE_M,      // Swap to servo if needed                             // RC78 ports for SONAR
+    PWM8 | TYPE_M,      // Swap to servo if needed                             // RC78 ports for SONAR
     0xFF
 };
 
@@ -145,14 +145,14 @@ static const uint8_t multiPWM[] =
 {
     PWM1  | TYPE_IW,    // input #1
     PWM2  | TYPE_IW,
-    PWM3  | TYPE_IW,
-    PWM4  | TYPE_IW,
-    PWM5  | TYPE_IW,
-    PWM6  | TYPE_IW,
-    PWM7  | TYPE_IW,
-    PWM8  | TYPE_IW,    // input #8
-    PWM9  | TYPE_M,     // motor #1 or servo #1 (swap to servo if needed)
-    PWM10 | TYPE_M,     // motor #2 or servo #2 (swap to servo if needed)
+    PWM3 | TYPE_IW,                                                            // UART ports for GPS
+    PWM4 | TYPE_IW,                                                            // UART ports for GPS
+    PWM5 | TYPE_IW,                                                            // RC5 ports for MONO_LED
+    PWM6 | TYPE_IW,                                                            // RC6 ports for MONO_LED
+    PWM7 | TYPE_IW,                                                            // RC78 ports for SONAR
+    PWM8 | TYPE_IW,     // input #8                                            // RC78 ports for SONAR
+    PWM9 | TYPE_M,      // motor #1 or servo #1 (swap to servo if needed)      // PWM56 ports for SONAR
+    PWM10 | TYPE_M,     // motor #2 or servo #2 (swap to servo if needed)      // PWM56 ports for SONAR
     PWM11 | TYPE_M,     // motor #1 or #3
     PWM12 | TYPE_M,
     PWM13 | TYPE_M,
@@ -546,7 +546,7 @@ bool pwmInit(drv_pwm_config_t *init)
         if (init->adcChannel && (init->adcChannel == port))    // skip ADC for powerMeter if configured
             continue;
 
-        //Start cGiesen mod
+        //Start cGiesen mod && altered by me...
         if (init->useRC5   && port == PWM5)                    // skip RC5 ports for MONO_LED
             continue;
 

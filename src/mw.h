@@ -4,13 +4,17 @@
 #define VBATFREQ 6                          // to read battery voltage - nth number of loop iterations
 
 #define  VERSION  211
-#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10 Mechagodzilla II " __DATE__ " / " __TIME__
+#define  FIRMWARE  "Naze32 cGiesen/Crashpilot/Johannes Harakiri10 Mechagodzilla - last beta?" __DATE__ " / " __TIME__
 #define  FIRMWAREFORLCD "Harakiri 10"
+
 
 #define LAT  0
 #define LON  1
 #define GPS_Y 0
 #define GPS_X 1
+
+//#define DEFINED_FW_DRAG
+#define DEFINED_TILTROTOR
 
 // Serial GPS only variables
 // navigation mode
@@ -34,25 +38,35 @@ typedef enum WPstatus
 // Syncronized with GUI. Only exception is mixer > 11, which is always returned as 11 during serialization.
 typedef enum MultiType
 {
-    MULTITYPE_TRI = 1,
-    MULTITYPE_QUADP = 2,
-    MULTITYPE_QUADX = 3,
-    MULTITYPE_BI = 4,
-    MULTITYPE_GIMBAL = 5,
-    MULTITYPE_Y6 = 6,
-    MULTITYPE_HEX6 = 7,
-    MULTITYPE_FLYING_WING = 8,
-    MULTITYPE_Y4 = 9,
-    MULTITYPE_HEX6X = 10,
-    MULTITYPE_OCTOX8 = 11,                  // Java GUI is same for the next 3 configs
-    MULTITYPE_OCTOFLATP = 12,               // MultiWinGui shows this differently
-    MULTITYPE_OCTOFLATX = 13,               // MultiWinGui shows this differently
-    MULTITYPE_AIRPLANE = 14,                // airplane / singlecopter / dualcopter (not yet properly supported)
-    MULTITYPE_HELI_120_CCPM = 15,
-    MULTITYPE_HELI_90_DEG = 16,
-    MULTITYPE_VTAIL4 = 17,
-    MULTITYPE_CUSTOM = 18,                  // no current GUI displays this
-    MULTITYPE_LAST = 19
+    MULTITYPE_TRI           = 1,
+    MULTITYPE_QUADP         = 2,
+    MULTITYPE_QUADX         = 3,
+    MULTITYPE_BI            = 4,
+    MULTITYPE_GIMBAL        = 5,
+    MULTITYPE_Y6            = 6,
+    MULTITYPE_HEX6          = 7,
+    MULTITYPE_FLYING_WING   = 8,     // tested Johannes
+    MULTITYPE_Y4            = 9,
+    MULTITYPE_HEX6X         = 10,
+    MULTITYPE_OCTOX8        = 11,
+    MULTITYPE_OCTOFLATP     = 12,
+    MULTITYPE_OCTOFLATX     = 13,
+    MULTITYPE_AIRPLANE      = 14,   // not tested  Johannes
+    MULTITYPE_HELI_120_CCPM = 15,   // not implemented
+    MULTITYPE_HELI_90_DEG   = 16,   // not implemented
+    MULTITYPE_VTAIL4        = 17,
+    MULTITYPE_HEX6H         = 18,   // new in MW 2.3, not implemented
+    MULTITYPE_CUSTOM        = 19,   // no current GUI displays this
+    MULTITYPE_DUALCOPTER    = 20,   // new in MW 2.3, not implemented
+    MULTITYPE_SINGLECOPTER  = 21,   // new in MW 2.3, not implemented
+    MULTITYPE_HEXV6         = 22,   // new in Baseflight, its a copy from Timecomp, not tested Johannes
+#ifdef DEFINED_FW_DRAG
+    MULTITYPE_FW_DRAG       = 23,   // new in MW 2.3, Flying wing with drag rudders
+#endif
+#ifdef DEFINED_TILTROTOR
+    MULTITYPE_TILTROTOR     = 24,   // new type for Bell Boing V22  @Johannes
+#endif
+    MULTITYPE_LAST          = 25
 } MultiType;
 
 typedef enum GimbalFlags
@@ -74,7 +88,8 @@ enum
     AUX1,
     AUX2,
     AUX3,
-    AUX4
+    AUX4,
+    NOCHAN      // Null channel
 };
 
 enum
@@ -112,6 +127,13 @@ enum
     CHECKBOXITEMS
 };
 
+enum {  // new for planes Johannes
+    NO_FLAP       = 0, // No flaps
+    BASIC_FLAP    = 1, // No flaperons - standard flap in one servo channel
+    PREMIXED_FLAP = 2, // Flaperons - two ailerons with flaps pre-mixed in the TX
+//    ADV_FLAP      = 3  // Flaperons - two independant aileron channels + one flap input on cfg.flapchann not implemented today
+};
+
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define abs(x) ((x) > 0 ? (x) : -(x))
@@ -132,8 +154,15 @@ typedef struct mixer_t
     const motorMixer_t *motor;
 } mixer_t;
 
-enum
-{
+typedef struct servo_conf_ {
+                      // this is a generic way to configure a servo, every multi type with a servo should use it
+  int16_t min;        // minimum value, must be more than 1020 with the current implementation
+  int16_t max;        // maximum value, must be less than 2000 with the current implementation
+  int16_t middle;     // default should be 1500 for Graupner and 1520 for Futuba servos
+  int8_t  rate;       // range [-100;+100] ; can be used to ajust a rate 0-100% and a direction
+} __attribute__ ((packed)) servo_conf_;
+
+enum {
     ALIGN_GYRO = 0,
     ALIGN_ACCEL = 1,
     ALIGN_MAG = 2
@@ -191,8 +220,6 @@ typedef struct config_t
     uint8_t  deadband;                      // introduce a deadband around the stick center for pitch and roll axis. Must be greater than zero.
     uint8_t  yawdeadband;                   // introduce a deadband around the stick center for yaw axis. Must be greater than zero.
     uint8_t  alt_hold_throttle_neutral;     // defines the neutral zone of throttle stick during altitude hold, default setting is +/-20
-    uint8_t  gps_adddb;                     // Additional Deadband for all GPS functions;
-    int8_t   hdfreeangle;                   // +-30 Degree Adjust Headfree
     uint8_t  spektrum_hires;                // spektrum high-resolution y/n (1024/2048bit)
     uint16_t midrc;                         // Some radios have not a neutral point centered on 1500. can be changed here
     uint16_t mincheck;                      // minimum rc end
@@ -214,18 +241,21 @@ typedef struct config_t
     uint8_t  passmotor;                     // Crashpilot: Only used with feature pass. If 0 = all Motors, otherwise specific Motor
     uint16_t mincommand;                    // This is the value for the ESCs when they are not armed. In some cases, this value must be lowered down to 900 for some specific ESCs
     uint16_t motor_pwm_rate;                // The update rate of motor outputs (50-498Hz)
+
+    // servo related stuff
     uint16_t servo_pwm_rate;                // The update rate of servo outputs (50-498Hz)
-    int16_t  servotrim[8];                  // Adjust Servo MID Offset & Swash angles
-    int8_t   servoreverse[8];               // Invert servos by setting -1
+    servo_conf_ servoConf[MAX_SERVOS];      // New servostructure @Johannes 
+    //int16_t servotrim[8];                   // Adjust Servo MID Offset & Swash angles  -> moved to ServoConf Johannes
+    //int8_t servoreverse[8];                 // Invert servos by setting -1  -> moved to ServoConf Johannes
 
     // mixer-related configuration
-    int8_t   yaw_direction;
-    uint16_t tri_yaw_middle;                // tail servo center pos. - use this for initial trim
+    int8_t yaw_direction;
+    /*uint16_t tri_yaw_middle;                // tail servo center pos. - use this for initial trim
     uint16_t tri_yaw_min;                   // tail servo min
-    uint16_t tri_yaw_max;                   // tail servo max
+    uint16_t tri_yaw_max;                   // tail servo max   moved to ServoConf Johannes  */
 
     // flying wing related configuration
-    uint16_t wing_left_min;                 // min/mid/max servo travel
+    /*uint16_t wing_left_min;                 // min/mid/max servo travel
     uint16_t wing_left_mid;
     uint16_t wing_left_max;
     uint16_t wing_right_min;
@@ -235,39 +265,37 @@ typedef struct config_t
     int8_t   pitch_direction_r;             // right servo - pitch orientation (opposite sign to pitch_direction_l if servos are mounted mirrored)
     int8_t   roll_direction_l;              // left servo - roll orientation
     int8_t   roll_direction_r;              // right servo - roll orientation  (same sign as ROLL_DIRECTION_L, if servos are mounted in mirrored orientation)
+		moved to ServoConf Johannes  */
 
     // gimbal-related configuration
     int8_t   gimbal_pitch_gain;             // gimbal pitch servo gain (tied to angle) can be negative to invert movement
     int8_t   gimbal_roll_gain;              // gimbal roll servo gain (tied to angle) can be negative to invert movement
     uint8_t  gimbal_flags;                  // in servotilt mode, various things that affect stuff
-    uint16_t gimbal_pitch_min;              // gimbal pitch servo min travel
+    /*uint16_t gimbal_pitch_min;              // gimbal pitch servo min travel
     uint16_t gimbal_pitch_max;              // gimbal pitch servo max travel
     uint16_t gimbal_pitch_mid;              // gimbal pitch servo neutral value
     uint16_t gimbal_roll_min;               // gimbal roll servo min travel
     uint16_t gimbal_roll_max;               // gimbal roll servo max travel
     uint16_t gimbal_roll_mid;               // gimbal roll servo neutral value
+    moved to ServoConf Johannes  */
 
     // Autoland
     uint8_t  al_barolr;                     // Temporary value "64" increase to increase Landingspeed
     uint8_t  al_snrlr;                      // You can specify different landingfactor here on sonar contact, because sonar land maybe too fast...
-    uint16_t al_lndthr;                     // This is the absolute throttle that kicks off the "has landed timer" if it is "0" or too low cfg.minthrottle is taken.
-    uint8_t  al_debounce;                   // (0-20%) 0 Disables. Defines a Throttlelimiter on Autoland. This percentage defines the maximum deviation of assumed hoverthrottle during Autoland
-    uint16_t al_tobaro;                     // Timeout in ms (100 - 5000) before shutoff on autoland. "al_lndthr" must be undershot for that timeperiod
-    uint16_t al_tosnr;                      // Timeout in ms (100 - 5000) If sonar aided land is wanted (snr_land = 1) you can choose a different timeout here
-
+    uint8_t  al_lndpercent;                 // (0-80%) Defines the Throttlepercentage when landing can be detected
     // gps-related stuff
     uint8_t  gps_type;                      // Type of GPS hardware. 0: NMEA 1: UBX 2+ ??
     float    gps_ins_vel;                   // Crashpilot: Value for complementary filter INS and GPS Velocity
-    uint16_t gps_lag;                       // GPS Lag in ms
-    int8_t   gps_phase;                     // Make a phaseshift +-30 Deg max of GPS output
+    float    gps_lag;                       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind
+    float    gps_phase;                     // Make a phaseshift +-90 Deg max of GPS output
     uint8_t  acc_ins_lpf;                   // ACC lowpass for Acc GPS INS
     uint8_t  gps_ph_minsat;                 // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
-    uint8_t  gps_ph_settlespeed;            // PH settlespeed in cm/s
+    uint16_t gps_ph_settlespeed;            // PH settlespeed in cm/s
+    uint16_t gps_ph_targetsqrt;             // This is the speed target of PH. That means if the copter moves faster than that, the maximal tiltangle reduced dramatically
     uint8_t  gps_maxangle;                  // maximal over all GPS bank angle
-    uint8_t  gps_ph_brakemaxangle;          // Maximal 5 Degree Overspeedbrake
-    uint8_t  gps_ph_minbrakeangle;          // 1-99% minimal percent of "brakemaxangle" left over for braking. Example brakemaxangle = 6 so 50 Percent is 3..
-    uint16_t gps_ph_forcetimeout;           // 1000 - 10000ms (1-10s) Time in ms when absolute PH is forced
+    uint8_t  gps_minanglepercent;           // Percent 1-100% of gps_maxangle for minimal tilt, as lower limit for "gps_ph_targetsqrt"
     uint32_t gps_baudrate;                  // GPS baudrate
+    uint8_t  gps_debug;                     // Prints out the raw GPS values in GUI for testing
     uint16_t gps_wp_radius;                 // if we are within this distance to a waypoint then we consider it reached (distance is in cm)
     uint8_t  gps_rtl_mindist;               // Minimal distance for RTL, otherwise it will just autoland, prevent Failsafe jump in your face, when arming copter and turning off TX
     uint8_t  gps_rtl_flyaway;               // If during RTL the distance increases beyond this valus in meters, something is wrong, autoland
@@ -304,6 +332,19 @@ typedef struct config_t
     float    snr_cf;                        // The bigger, the more Sonarinfluence
     uint8_t  snr_diff;                      // Maximal allowed difference in cm between sonar readouts (100ms rate and maxdiff = 50 means max 5m/s)
     uint8_t  snr_land;                      // This helps Sonar when landing, by setting upper throttle limit to current throttle. - Beware of Trees!!   
+    // Airplane mixer stuff @Johannes
+    bool     airplane;                      // airplane/fixed wing hardware config, lots of servos etc
+    uint8_t  flapmode;                      // Switch for flaperon mode
+    uint8_t  flapchan;                      // RC channel number for simple flaps
+    uint8_t  aileron2;                      // RC channel number for second aileron
+    uint8_t  flapspeed;                     // Desired rate of change of flaps 
+    uint8_t  flapstep;                      // Steps for each flap movement
+    int8_t   flapdir;                       // Flap polarity 1/-1 Johannes
+    uint16_t flapmaxmove;                   // max Flap travel for mixed flaps Johannes
+    int8_t   rollPIDpol;                    // Roll PID polarity
+    int8_t   pitchPIDpol;                   // Pitch PID polarity
+    int8_t   yawPIDpol;                     // Yaw PID polarity
+    uint16_t tilt_vtol_detect;              // Pattern to switch from heli into airplane-mode Johannes
     motorMixer_t customMixer[MAX_MOTORS];   // custom mixtable
     uint8_t  magic_ef;                      // magic number, should be 0xEF
     uint8_t  chk;                           // XOR checksum
@@ -348,7 +389,7 @@ extern uint16_t calibratingA;
 extern uint16_t calibratingG;
 
 extern int16_t  annex650_overrun_count;
-extern float    BaroAlt;
+extern int32_t  BaroAlt;
 extern int16_t  sonarAlt;
 extern int32_t  EstAlt;
 extern int32_t  AltHold;
@@ -378,13 +419,14 @@ extern float    heading;
 extern float    magHold;
 extern float    magneticDeclination;
 
-// SONAR /BARO / AUTOLAND
+// SONAR /BARO /AUTOLAND
 extern uint8_t  SonarStatus;                // 0 = no contact, 1 = made contact, 2 = steady contact
 extern uint8_t  SonarBreach;                // 0 = Breach unknown, 1 = breached lower limit, 2 = breached upper limit (not used)
 extern uint16_t LandDetectMinThr;           // Is set upon Baro initialization
 
 // GPS stuff
 extern int32_t  GPS_coord[2];
+extern int32_t  Real_GPS_coord[2];          // Pure GPS Coords
 extern int32_t  GPS_home[2];
 extern int32_t  GPS_WP[2];                  // Currently used WP
 extern uint8_t  GPS_numSat;
@@ -418,98 +460,92 @@ extern uint32_t LED_Value;
 extern uint32_t LED_Value;
 extern uint8_t  LED_Value_Delay;
 
-// Main
-void     loop(void);
-void     pass(void);
-void     LD0_OFF(void);                         // Crashpilot LED Inverter stuff
-void     LD1_OFF(void);
-void     LD0_ON(void);
-void     LD1_ON(void);
+// main
+void loop(void);
+void pass(void);
+void LD0_OFF(void);                         // Crashpilot LED Inverter stuff
+void LD1_OFF(void);
+void LD0_ON(void);
+void LD1_ON(void);
 
 // IMU
-void     imuInit(void);
-void     annexCode(void);
-void     computeIMU(void);
-void     blinkLED(uint8_t num, uint8_t wait, uint8_t repeat);
-void     getEstimatedAltitude(void);
+void imuInit(void);
+void annexCode(void);
+void computeIMU(void);
+void blinkLED(uint8_t num, uint8_t wait, uint8_t repeat);
+void getEstimatedAltitude(void);
 
 // Sensors
-void     sensorsAutodetect(void);
-void     batteryInit(void);
+void sensorsAutodetect(void);
+void batteryInit(void);
 uint16_t batteryAdcToVoltage(uint16_t src);
-void     ACC_getADC(void);
-void     alignSensors(uint8_t type, int16_t *data);
-void     Baro_update(void);
-void     Gyro_getADC(void);
-void     Mag_init(void);
-int      Mag_getADC(void);
-void     Sonar_init(void);
-void     Sonar_update(void);
+void ACC_getADC(void);
+void Baro_update(void);
+void Gyro_getADC(void);
+void Mag_init(void);
+int  Mag_getADC(void);
+void Sonar_init(void);
+void Sonar_update(void);
 
 // Output
-uint8_t  mixerInit(void);
-
+uint8_t mixerInit(void);
 //void mixerInit(void);
-void     mixerLoadMix(int index);
-void     writeServos(void);
-void     writeMotors(void);
-void     writeAllMotors(int16_t mc);
-void     mixTable(void);
+void mixerLoadMix(int index);
+void writeServos(void);
+void writeMotors(void);
+void writeAllMotors(int16_t mc);
+void mixTable(void);
 
 // Serial
-void     serialInit(uint32_t baudrate);
-void     serialCom(void);
-void     serialOSD(void);
+void serialInit(uint32_t baudrate);
+void serialCom(void);
+void serialOSD(void);
 
 // Config
-void     parseRcChannels(const char *input);
-void     readEEPROM(void);
-void     writeParams(uint8_t b);
-void     checkFirstTime(bool reset);
-bool     sensors(uint32_t mask);
-void     sensorsSet(uint32_t mask);
-void     sensorsClear(uint32_t mask);
+void parseRcChannels(const char *input);
+void readEEPROM(void);
+void writeParams(uint8_t b);
+void checkFirstTime(bool reset);
+bool sensors(uint32_t mask);
+void sensorsSet(uint32_t mask);
+void sensorsClear(uint32_t mask);
 uint32_t sensorsMask(void);
-bool     feature(uint32_t mask);
-void     featureSet(uint32_t mask);
-void     featureClear(uint32_t mask);
-void     featureClearAll(void);
+bool feature(uint32_t mask);
+void featureSet(uint32_t mask);
+void featureClear(uint32_t mask);
+void featureClearAll(void);
 uint32_t featureMask(void);
 
 // General RC stuff
-void     computeRC(void);
-void     GetActualRCdataOutRCDataSave(void);
+void computeRC(void);
+void GetActualRCdataOutRCDataSave(void);
 
 // RC spektrum
-void     spektrumInit(void);
-bool     spektrumFrameComplete(void);
+void spektrumInit(void);
+bool spektrumFrameComplete(void);
 
 // buzzer
-void     buzzer(uint8_t warn_vbat);
+void buzzer(uint8_t warn_vbat);
 
 // cli
-void     cliProcess(void);
+void cliProcess(void);
 
 // gps
-void     gpsInit(uint32_t baudrate);
-void     GPS_set_pids(void);
-void     GPS_reset_home_position(void);
-void     GPS_reset_nav(void);
-void     GPS_set_next_wp(int32_t* lat, int32_t* lon);
-void     GPS_alltime(void);
-bool     DoingGPS(void);
-float    wrap_18000(float value);
+void gpsInit(uint32_t baudrate);
+void GPS_set_pids(void);
+void GPS_reset_home_position(void);
+void GPS_reset_nav(void);
+void GPS_set_next_wp(int32_t* lat, int32_t* lon);
+void GPS_alltime(void);
+bool DoingGPS(void);
+float wrap_18000(float);
 
 // telemetry
-void     initTelemetry(bool State);
-void     sendTelemetry(void);
+void initTelemetry(bool State);
+void sendTelemetry(void);
 
-// Init the led gpio port when enabled
-void     ledToggleInit(void);
+//Init the led gpio port when enabled
+void ledToggleInit();
 
-// Update the leds, enabled signals that the leds are enabled
-void     ledToggleUpdate(bool activated);
-
-// Mathematic helper functions here
-int16_t  _atan2f(float y, float x);
-float    fsq(float x);
+//Update the leds, enabled signals that the leds are enabled
+void ledToggleUpdate(bool activated);

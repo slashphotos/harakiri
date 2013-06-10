@@ -43,6 +43,7 @@ uint16_t LandDetectMinThr = 0;                                       // Is set u
 // GPS
 // **********************
 int32_t  GPS_coord[2];                                               // They contain some ins as well
+int32_t  Real_GPS_coord[2];                                          // Pure GPS Coords
 int32_t  GPS_home[2];
 int32_t  GPS_WP[2];                                                  // Currently used WP
 uint8_t  GPS_numSat;
@@ -117,14 +118,6 @@ void blinkLED(uint8_t num, uint8_t wait, uint8_t repeat)
     }
 }
 
-int16_t RCDeadband(int16_t rcvalue, uint8_t rcdead)                  // Actually needed for additional GPS deadband
-{
-    if (abs(rcvalue) < rcdead) rcvalue = 0;
-    else if (rcvalue > 0) rcvalue = rcvalue - (int16_t)rcdead;
-    else rcvalue = rcvalue + (int16_t)rcdead;
-    return rcvalue;
-}
-
 #define BREAKPOINT 1500
 
 // this code is executed at each loop and won't interfere with control loop if it lasts less than 650 microseconds
@@ -194,11 +187,7 @@ void annexCode(void)
 
     if(f.HEADFREE_MODE)
     {
-//        float radDiff = (heading - headFreeModeHold) * RADX;
-        float radDiff = heading - headFreeModeHold + (float)cfg.hdfreeangle;    // let the user adjust headfree phase
-        if (radDiff > 180.0f)       radDiff = radDiff - 360.0f;                 // Wrap to -180 0 +180 Degree
-        else if (radDiff < -180.0f) radDiff = radDiff + 360.0f;
-        radDiff = radDiff * RADX;                                               // Degree to RAD
+        float radDiff = (heading - headFreeModeHold) * RADX;
         float cosDiff = cosf(radDiff);
         float sinDiff = sinf(radDiff);
         int16_t rcCommand_PITCH = (float)rcCommand[PITCH] * cosDiff + (float)rcCommand[ROLL] * sinDiff;
@@ -500,20 +489,16 @@ void loop(void)
     static uint32_t AltRCTimer0;
     static int32_t  AltHold8;
     static uint8_t  ThrFstTimeCenter;
-    static int8_t   Althightchange;
+    static uint8_t  Althightchange;
     static uint32_t AutolandGeneralTimer;
     static uint8_t  AutolandState;
     static int16_t  LastAltThrottle;
-    static uint8_t  HoverThrcnt;
-    static uint16_t HoverThrottle;
     static int16_t  SnrLandThrlimiter;
-    static int16_t  BaroLandThrlimiter;
     static uint32_t RTLGeneralTimer;
     static uint8_t  RTLstate;
     static int16_t  DistanceToHomeMetersOnRTLstart;
     static uint8_t  PHminSat;
-    float           CosYawxPhase, SinYawyPhase, TmpPhase, tmp0flt;
-    int16_t         tmp0, thrdiff;
+    float           CosYawxPhase, SinYawyPhase, TmpPhase;
 
     // this will return false if spektrum is disabled. shrug.
     if (spektrumFrameComplete()) computeRC();                        // Generates no rcData yet, but rcDataSAVE
@@ -661,7 +646,7 @@ void loop(void)
                 AccInflightCalibrationSavetoEEProm = 1;
             }
         }
-        
+
         for (i = 0; i < cfg.auxChannels; i++)                        // for (i = 0; i < 4; i++)
             auxState |= (rcData[AUX1 + i] < 1300) << (3 * i) | (1300 < rcData[AUX1 + i] && rcData[AUX1 + i] < 1700) << (3 * i + 1) | (rcData[AUX1 + i] > 1700) << (3 * i + 2);
         for (i = 0; i < CHECKBOXITEMS; i++) rcOptions[i] = (auxState & cfg.activate[i]) > 0;
@@ -670,8 +655,6 @@ void loop(void)
 
         if ((rcOptions[BOXARM]) == 0) f.OK_TO_ARM = 1;               // Moved it here
 
-        if (sensors(SENSOR_BARO) && !GroundAltInitialized) DisArmCopter(); // Keep Copter disarmed until baro init is done
-          
 /////// GPS INS TESTCODE
 //				int16_t knob = constrain(rcData[AUX3]-1000,0,1000);
 //				cfg.gps_ins_vel = (500 + (float)knob * 0.5f)/1000.0f;
@@ -822,12 +805,12 @@ void loop(void)
             case 4:                                                  // Wait for Tailstuff before RTL
                 if (cfg.nav_controls_heading == 1)                   // Tail control
                 {
-                    if (cfg.nav_tail_first == 1) magHold = wrap_18000(((float)GPS_directionToHome * 100) - 18000) / 100;
+                    if (cfg.nav_tail_first == 1) magHold = wrap_18000(((int32_t)GPS_directionToHome * 100) - 18000) / 100;
                     else magHold = GPS_directionToHome;
-                    tmp0 = heading - magHold;                        // tmp0 contains headingdifference
-                    if (tmp0 <= -180) tmp0 += 360;
-                    if (tmp0 >= +180) tmp0 -= 360;
-                    if (abs(tmp0) < 5) RTLstate++;                   // Turns true, when in range of +-5 degrees
+                    int16_t headingdifference = heading - magHold;
+                    if (headingdifference <= -180) headingdifference += 360;
+                    if (headingdifference >= +180) headingdifference -= 360;
+                    if (abs(headingdifference) < 5) RTLstate++;      // Turns true, when in range of +-5 degrees
                 }
                 else RTLstate++;
                 break;
@@ -840,8 +823,8 @@ void loop(void)
             case 6:                                                  // OMG Do the f** RTL now
                 rcOptions[BOXGPSHOLD]  = 0;                          // GPS hold OFF
                 rcOptions[BOXGPSHOME]  = 1;                          // RTL
-                tmp0 = (int16_t)GPS_distanceToHome - DistanceToHomeMetersOnRTLstart; // tmp0 contains flyawayvalue
-                if (cfg.gps_rtl_flyaway !=0 && tmp0 > (int16_t)cfg.gps_rtl_flyaway) RTLstate++;
+                int16_t flyawayvalue = (int16_t)GPS_distanceToHome - DistanceToHomeMetersOnRTLstart;
+                if (cfg.gps_rtl_flyaway !=0 && flyawayvalue > (int16_t)cfg.gps_rtl_flyaway) RTLstate++;
                 if (wp_mode == WP_STATUS_DONE) RTLstate++;           // OK RTL is DONE
                 break;
             case 7:                                                  // Do Autoland
@@ -877,38 +860,41 @@ void loop(void)
         if ((GPS_numSat < 5 || !f.GPS_FIX) &&(f.ANGLE_MODE || f.HORIZON_MODE)) LD1_ON();
         else LD1_OFF();
 
-#ifdef BARO
-        if (!f.ARMED)                                                // Reset Baro stuff while not armed, but keep the other shit running so that poor user can see a green box
-            f.BARO_MODE = 0;                                         // and not cry in the forums my baro is dead, and someone writes some code that also tries to read out the baro serial number.
+#ifdef BARO                                                          // Crashpilot
+        if (!f.ARMED)                                                // Reset the Barostuff if not armed
+        {
+            f.BARO_MODE         = 0;
+            AutolandState       = 0;
+            SnrLandThrlimiter   = 0;
+            AltHold8            = 0;
+            AltHold             = 0;
+            AltRCTimer0         = 0;
+            ThrFstTimeCenter    = 0;
+            Althightchange      = 0;
+            initialThrottleHold = 0;
+            LastAltThrottle     = 0;
+        }
 
         if (sensors(SENSOR_BARO))
         {
             if (rcOptions[BOXBARO] && GroundAltInitialized)
             {
-                if (!f.BARO_MODE)                                    // Initialize Baromode here if it isn't already
+                if (((rcData[THROTTLE]) < cfg.mincheck) && AutolandState == 0) AutolandState = 1; // Start Autoland
+                if (((rcData[THROTTLE]) > cfg.mincheck) && AutolandState != 0)
                 {
+                    AutolandState = 0;                               // Autolandus interruptus on Userinput
+                    f.BARO_MODE = 0;                                 // Reset Barostuff i.e wait for Stickcenter again
+                }
+                if (!f.BARO_MODE)
+                {
+                    f.BARO_MODE         = 1;
                     AltHold             = EstAlt;
                     AltHold8            = AltHold << 3;
                     AltRCTimer0         = 0;
                     ThrFstTimeCenter    = 0;
                     Althightchange      = 0;
-                    AutolandState       = 0;
                     initialThrottleHold = rcCommand[THROTTLE];
                     LastAltThrottle     = rcCommand[THROTTLE];
-                    f.BARO_MODE         = 1;                         // Finally set baromode to initialized
-                }
-                else
-                {                                                    // Baromode initialized check for Autolanding
-                    if (rcData[THROTTLE] < cfg.mincheck && AutolandState == 0) AutolandState = 1;     // Start Autoland
-                    if (rcData[THROTTLE] > cfg.mincheck && AutolandState != 0)// Autolandus interruptus on Userinput reset some stuff
-                    {
-                        AutolandState       = 0;   
-                        ThrFstTimeCenter    = 0;
-                        Althightchange      = 0;
-                        AltHold             = EstAlt;
-                        AltHold8            = AltHold << 3;
-                        initialThrottleHold = LastAltThrottle;
-                    }
                 }
             }
             else
@@ -917,15 +903,11 @@ void loop(void)
                 AutolandState = 0;                                   // No Baroswitch, no Autoland
             }
         }
-        else
-        {
-            AutolandState = 0;                                      // No Baro, no Autoland
-            f.BARO_MODE   = 0;                                      // No Baromode
-        }
+        else AutolandState = 0;                                      // No Baro, no Autoland
 #endif
-
+        
 #ifdef  MAG
-        if (sensors(SENSOR_MAG) &&  cfg.mag_calibrated == 1)
+        if (sensors(SENSOR_MAG))
         {
             if (rcOptions[BOXMAG])
             {
@@ -964,7 +946,7 @@ void loop(void)
                 }
                 else f.GPS_HOME_MODE = 0;
 
-                if (rcOptions[BOXGPSHOLD] && GPS_numSat >= PHminSat) // Crashpilot Only do poshold with specified Satnr or more
+                if (rcOptions[BOXGPSHOLD] && GPS_numSat >= PHminSat) // Crashpilot Only do poshold with 7 Sats or more
                 {
                     if (!f.GPS_HOLD_MODE)
                     {
@@ -985,18 +967,10 @@ void loop(void)
 
         }                                                            // END of sensors SENSOR_GPS
 
-        else
-
-        {
-            f.GPS_HOME_MODE = 0;
-            f.GPS_HOLD_MODE = 0;
-            nav_mode = NAV_MODE_NONE;
-        }
-
         if (rcOptions[BOXPASSTHRU]) f.PASSTHRU_MODE = 1;
         else f.PASSTHRU_MODE = 0;
 
-        if (cfg.mixerConfiguration == MULTITYPE_FLYING_WING || cfg.mixerConfiguration == MULTITYPE_AIRPLANE) f.HEADFREE_MODE = 0;
+        if (cfg.airplane) f.HEADFREE_MODE = 0;  // @Johannes
 
 // AT THE VERY END DO SOME KILLSWITCHSTUFF, IF NEEDED
 // If Copter is armed by box and a cfg.killswitchtime (in ms) is defined
@@ -1006,11 +980,6 @@ void loop(void)
         if (Killtimer != 0 && currentTime >= Killtimer) DisArmCopter(); // Kill Copter
 // AT THE VERY END DO SOME KILLSWITCHSTUFF, IF NEEDED
 
-        if (DoingGPS() && cfg.gps_adddb !=0)                         // Do some additional deadband for GPS, if needed
-        {
-            rcCommand[PITCH] = RCDeadband(rcCommand[PITCH], cfg.gps_adddb);
-            rcCommand[ROLL]  = RCDeadband(rcCommand[ROLL],  cfg.gps_adddb);
-        }
 // *********** END OF 50Hz RC LOOP ***********
 
     }
@@ -1039,62 +1008,40 @@ void loop(void)
         Baro_update();
         getEstimatedAltitude();
     }
-    
+
 //#define al_barolr 64                                               // 40cm/sec (64/8*5)
 #define HoverTimeBeforeLand     2000000                              // Wait 2 sec in the air for VirtualThrottle to catch up
-//#define HasLandedTimeCheckBaro  2000000                              // Timeperiod for idlethrottle before shut off
-//#define HasLandedTimeCheckSonar 1000000                              // Timeperiod for idlethrottle before shut off - faster with Sonar
-    if (sensors(SENSOR_BARO) && f.BARO_MODE && f.ARMED)              // GroundAltInitialized must not be checked but armed, in case of dumb user -> see above
+#define HasLandedTimeCheckBaro  2000000                              // Timeperiod for idlethrottle before shut off
+#define HasLandedTimeCheckSonar 1000000                              // Timeperiod for idlethrottle before shut off - faster with Sonar
+    if (sensors(SENSOR_BARO) && f.BARO_MODE && f.ARMED && GroundAltInitialized)
     {
         switch (AutolandState)
         {
         case 0:                                                      // No Autoland Do nothing
-            SnrLandThrlimiter     = 0;                               // Reset it here!
-            BaroLandThrlimiter    = 0;
-            AutolandGeneralTimer  = 0;
+            SnrLandThrlimiter = 0;                                   // Reset it here!
             break;
-        
         case 1:                                                      // Start Althold
-            rcData[THROTTLE]     = cfg.midrc;                        // Put throttlestick to middle
+            rcData[THROTTLE] = cfg.midrc;                            // Put throttlestick to middle
             AutolandGeneralTimer = currentTime + HoverTimeBeforeLand;// prepare timer
-            HoverThrcnt          = 1;                                // Initialize Hoverthrottlestuff here
-            HoverThrottle        = LastAltThrottle;
             AutolandState++;
             break;
-        
-        case 2:                                                      // We hover here and gather the Hoverthrottle
-            rcData[THROTTLE]     = cfg.midrc;                        // Put throttlestick to middle: Hover some time to gather Hoverthr
-            HoverThrottle       += LastAltThrottle;
-            HoverThrcnt ++;
-            if (HoverThrcnt == 20)
-            {
-              HoverThrottle      = HoverThrottle / 20;               // Average of 20 Values
-              HoverThrcnt        = 0;
-            }
-            if (HoverThrcnt == 0 && currentTime > AutolandGeneralTimer) AutolandState++; // Wait for Hoverthrottle to finish before proceeding
+        case 2:
+            rcData[THROTTLE] = cfg.midrc;                            // Put throttlestick to middle: Hover certain time
+            if (currentTime > AutolandGeneralTimer) AutolandState++;
             break;
-            
         case 3:                                                      // Start descent initialize Variables
-            if (cfg.al_debounce != 0)                                // Set BaroLandThrlimiter now, if wanted
-            {
-                tmp0 = (int16_t)HoverThrottle - cfg.minthrottle;     // tmp0 contains absolute absolute hoverthrottle
-                if (tmp0 > 0)                                        // Check for crazy error here to be on the safe side
-                    BaroLandThrlimiter = HoverThrottle + ((float)tmp0 * (float)cfg.al_debounce * 0.01f);
-                else                                                 // Something is very wrong here don't set BaroLandThrlimiter
-                    BaroLandThrlimiter = 0;
-            }
-            rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.al_barolr;
             if (sensors(SENSOR_SONAR) && SonarStatus == 2)           // Set al_snrlr on steady sonar contact
                 rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.al_snrlr;
+            else
+                rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.al_barolr;
             AutolandGeneralTimer = 0;
             AutolandState++;
             break;
-            
-        case 4:                                                      // Keep descending and check for landing
+        case 4:                                                      // Check for landing
             rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.al_barolr;
             if (sensors(SENSOR_SONAR))                               // Adjust Landing
             {
-                if (SonarStatus == 2)                                // SolidSonarContact use maybe different Landrate
+                if (SonarStatus == 2)                                // User wants different Landrate on Solid Sonarcontact
                     rcData[THROTTLE] = cfg.midrc - cfg.alt_hold_throttle_neutral - cfg.al_snrlr;
                 if (cfg.snr_land == 1 && SonarBreach == 1 && SnrLandThrlimiter == 0) // Sonarlanding if SonarBreach = 1 (Proximity breach) fix the upper throttlevalue
                     SnrLandThrlimiter = cfg.maxthrottle;                             // Set maximal thr as upper limit, will be adjusted below
@@ -1102,27 +1049,25 @@ void loop(void)
             if (LastAltThrottle <= LandDetectMinThr && AutolandGeneralTimer == 0)    // LandDetectMinThr is set upon Baro initialization in sensors/sensorsAutodetect
             {
                 if (SnrLandThrlimiter == 0)
-                    AutolandGeneralTimer = currentTime + ((uint32_t)cfg.al_tobaro * 1000); // No Sonar limiter, do the normal timeout
+                    AutolandGeneralTimer = currentTime + HasLandedTimeCheckBaro;     // No Sonar limiter, do the normal timeout
                 else
-                    AutolandGeneralTimer = currentTime + ((uint32_t)cfg.al_tosnr * 1000);  // Aided Sonar landing is wanted and limiter set, do perhaps shorter timeout then
+                    AutolandGeneralTimer = currentTime + HasLandedTimeCheckSonar;    // Sonar limiter, do shorter timeout
             }
             if (LastAltThrottle > LandDetectMinThr) AutolandGeneralTimer = 0;        // Reset Timer
             if (AutolandGeneralTimer != 0 && currentTime > AutolandGeneralTimer) AutolandState++;
             if (TiltValue < 0)  AutolandState++;                     // Proceed to disarm if copter upside down
             break;
-            
         case 5:                                                      // Shut down Copter forever....
             DisArmCopter();
             break;
         }
-        
-        thrdiff = rcData[THROTTLE] - cfg.midrc;
-        tmp0    = abs(thrdiff);
-        if (tmp0 < cfg.alt_hold_throttle_neutral && ThrFstTimeCenter == 0) ThrFstTimeCenter = 1;
-        if (currentTime >= AltRCTimer0)                                                                                       // X Hz Loop
+        int16_t thrdiff = rcData[THROTTLE] - cfg.midrc;
+        int16_t ABSthrdiff = abs(thrdiff);
+        if (ABSthrdiff < cfg.alt_hold_throttle_neutral && ThrFstTimeCenter == 0) ThrFstTimeCenter = 1;
+        if (currentTime >= AltRCTimer0)                                                                                       // 10 Hz Loop
         {
             AltRCTimer0 = currentTime + 100000;
-            if (ThrFstTimeCenter == 1 && tmp0 > cfg.alt_hold_throttle_neutral)
+            if (ThrFstTimeCenter == 1 && ABSthrdiff > cfg.alt_hold_throttle_neutral)
             {
                 initialThrottleHold = initialThrottleHold + (BaroP / 100);							                                      // Adjust Baselinethr by 1% of BaroP
                 if (LastAltThrottle < cfg.maxthrottle && thrdiff >= 0)
@@ -1137,9 +1082,9 @@ void loop(void)
                     else AltHold8 = (float)AltHold8 + ((float)thrdiff * 0.6f) + cfg.alt_hold_throttle_neutral;                // Autoland with spec. rate
                 }
             }
-            else                                                                                                              // Stick is to center here
+            else
             {
-                if (ThrFstTimeCenter == 1 && Althightchange != 0)                                                             // Are we coming from a hight change?
+                if (ThrFstTimeCenter == 1 && Althightchange != 0)
 								{
 								    AltHold8 = (EstAlt + ((float)vario * cfg.baro_lag)) * 8;                                                  // We are coming from a hightchange project stoppingpoint
                     AltHold  = AltHold8 >> 3;
@@ -1148,24 +1093,17 @@ void loop(void)
                 Althightchange = 0;
             }
         }                                                                                                                     // End of X Hz Loop
-
         AltHold = AltHold8 >> 3;                                                                                              // Althold8 is remanent from my mwii project, will be replaced
         if (AutolandState != 0) BaroD = 0;                                                                                    // Don't do Throttle angle correction when autolanding
-        rcCommand[THROTTLE] = constrain(initialThrottleHold + BaroP + BaroD - BaroI, cfg.minthrottle, cfg.maxthrottle);
-
-        if (AutolandState != 0)                                                                                               // We are Autolanding and 
+        if (AutolandState != 0 && SnrLandThrlimiter != 0)                                                                     // We are Autolanding and Sonar has given proximity alert and sonar land support is wanted
         {
-            if (SnrLandThrlimiter != 0)                                                                                       // Check sonarlimiter first
-            {                                                                                                                 // Sonar has given proximity alert and sonar land support is wanted
-                if (LastAltThrottle < SnrLandThrlimiter) SnrLandThrlimiter = LastAltThrottle;                                 // Adjust limiter here
-                if (rcCommand[THROTTLE] > SnrLandThrlimiter) rcCommand[THROTTLE] = SnrLandThrlimiter;                         // We are autolanding and Limiter is set
-            }
-            else                                                                                                              // Only do Barolimiter on landing, if we have no Sonarlimiter
-            {
-                if (BaroLandThrlimiter != 0 && rcCommand[THROTTLE] > BaroLandThrlimiter)
-                    rcCommand[THROTTLE] = BaroLandThrlimiter;
-            }
+            if (LastAltThrottle < SnrLandThrlimiter)                                                                          // Adjust Throttlelimit here
+                SnrLandThrlimiter = LastAltThrottle;
+            rcCommand[THROTTLE] = constrain(initialThrottleHold + BaroP + BaroD - BaroI, cfg.minthrottle, SnrLandThrlimiter); // We are autolanding and Limiter is set
         }
+        else
+            rcCommand[THROTTLE] = constrain(initialThrottleHold + BaroP + BaroD - BaroI, cfg.minthrottle, cfg.maxthrottle);
+
         LastAltThrottle = rcCommand[THROTTLE];
     }
 #endif
@@ -1201,7 +1139,7 @@ void loop(void)
             }
             else
             {
-                TmpPhase = heading + (float)cfg.gps_phase;           // add Phase
+                TmpPhase = heading + cfg.gps_phase;                  // add Phase
                 if (TmpPhase > 180.0f) TmpPhase = TmpPhase - 360.0f; // Wrap to -180 0 +180 Degree
                 else if (TmpPhase < -180.0f) TmpPhase = TmpPhase + 360.0f;
                 TmpPhase     = TmpPhase * RADX;                      // Degree to RAD
@@ -1240,30 +1178,27 @@ void loop(void)
             if ((f.ANGLE_MODE || f.HORIZON_MODE) && axis < 2)        // MODE relying on ACC 50 degrees max inclination
             {
                 errorAngle = constrain(2.0f * (float)rcCommand[axis] + GPS_angle[axis], -500.0f, +500.0f) - (float)angle[axis] + (float)cfg.angleTrim[axis];
-                errorAngle = errorAngle * (float)cycleTime / BasePIDtime; // Crashpilot: Include Cylcletime take 3ms as basis. More deltaT more error
-                PTermACC   = errorAngle * (float)cfg.P8[PIDLEVEL] * 0.01f;
-                tmp0flt    = (float)cfg.D8[PIDLEVEL] * 5.0f;
-                PTermACC   = constrain(PTermACC, -tmp0flt, +tmp0flt);
+                errorAngle = errorAngle * (float)cycleTime/BasePIDtime; // Crashpilot: Include Cylcletime take 3ms as basis. More deltaT more error
+                PTermACC = errorAngle * (float)cfg.P8[PIDLEVEL] / 100.0f;
+                PTermACC = constrain(PTermACC, -(float)cfg.D8[PIDLEVEL] * 5.0f, +(float)cfg.D8[PIDLEVEL] * 5.0f);
                 errorAngleI[axis] = constrain(errorAngleI[axis] + errorAngle, -10000.0f, +10000.0f); // WindUp
-                ITermACC   = ((float)errorAngleI[axis] * (float)cfg.I8[PIDLEVEL]) / 4096.0f;
+                ITermACC = ((float)errorAngleI[axis] * (float)cfg.I8[PIDLEVEL])/4096.0f;
             }
-
-            if (!f.ANGLE_MODE || f.HORIZON_MODE || axis == 2)        // MODE relying on GYRO or YAW axis
+            if (!f.ANGLE_MODE || axis == 2)                          // MODE relying on GYRO or YAW axis
             {
-                error  = (float)rcCommand[axis] * 80.0f / (float)cfg.P8[axis];
-                error  = error * (float)cycleTime / BasePIDtime;     // Crashpilot: Include Cylcletime take 3ms as basis. More deltaT more error
+                error = (float)rcCommand[axis]*80.0f/(float)cfg.P8[axis];
+                error = error*(float)cycleTime/BasePIDtime;          // Crashpilot: Include Cylcletime take 3ms as basis. More deltaT more error
                 error -= (float)gyroData[axis];
                 PTermGYRO = (float)rcCommand[axis];
                 errorGyroI[axis] = constrain(errorGyroI[axis] + error, -16000.0f, +16000.0f);
                 if (abs(gyroData[axis]) > 640.0f)
                     errorGyroI[axis] = 0;
-                ITermGYRO = errorGyroI[axis] * (float)cfg.I8[axis] * 0.000125f;
+                ITermGYRO = (errorGyroI[axis]/125.0f * (float)cfg.I8[axis])/64.0f;
             }
-
             if (f.HORIZON_MODE && axis < 2)
             {
-                PTerm = (PTermACC * (500.0f - prop) + PTermGYRO * prop) * 0.002f;
-                ITerm = (ITermACC * (500.0f - prop) + ITermGYRO * prop) * 0.002f;
+                PTerm = (PTermACC * (500.0f - prop) + PTermGYRO * prop) / 500.0f;
+                ITerm = (ITermACC * (500.0f - prop) + ITermGYRO * prop) / 500.0f;
             }
             else
             {
@@ -1278,16 +1213,16 @@ void loop(void)
                     ITerm = ITermGYRO;
                 }
             }
-            PTerm          -= ((float)gyroData[axis] * (float)dynP8[axis] * 0.0125f);
-            delta           = (float)gyroData[axis] - (float)lastGyro[axis];
-            lastGyro[axis]  = gyroData[axis];
-            deltaSum        = delta1[axis] + delta2[axis] + delta;
-            delta2[axis]    = delta1[axis];
-            delta1[axis]    = delta;
-            deltaSum        = lastDTerm[axis] + (dT / (RC + dT)) * (deltaSum - lastDTerm[axis]); // pt1 element http://www.multiwii.com/forum/viewtopic.php?f=23&t=2624
+            PTerm -= (float)gyroData[axis] * (float)dynP8[axis] / 10.0f / 8.0f;
+            delta = (float)gyroData[axis] - (float)lastGyro[axis];
+            lastGyro[axis] = gyroData[axis];
+            deltaSum = delta1[axis] + delta2[axis] + delta;
+            delta2[axis] = delta1[axis];
+            delta1[axis] = delta;
+            deltaSum = lastDTerm[axis] + (dT / (RC + dT)) * (deltaSum - lastDTerm[axis]); // pt1 element http://www.multiwii.com/forum/viewtopic.php?f=23&t=2624
             lastDTerm[axis] = deltaSum;						                   // pt1 element http://www.multiwii.com/forum/viewtopic.php?f=23&t=2624
-            DTerm           = (float)deltaSum * (float)dynD8[axis] * 0.03125f;
-            axisPID[axis]   = PTerm + ITerm - DTerm;
+            DTerm = ((float)deltaSum * (float)dynD8[axis])/32.0f;
+            axisPID[axis] =  PTerm + ITerm - DTerm;
         }
 
     }
@@ -1301,22 +1236,20 @@ void loop(void)
             {
                 errorAngle = (int16_t)constrain(2 * rcCommand[axis] + (int16_t)GPS_angle[axis], -500, +500) - angle[axis] + cfg.angleTrim[axis];
                 PTermACC   = (int16_t)((int32_t)errorAngle * cfg.P8[PIDLEVEL] / 100);
-                PTermACC   = (int16_t)constrain(PTermACC, -cfg.D8[PIDLEVEL] * 5, +cfg.D8[PIDLEVEL] * 5);
+                PTermACC = (int16_t)constrain(PTermACC, -cfg.D8[PIDLEVEL] * 5, +cfg.D8[PIDLEVEL] * 5);
                 errorAngleI[axis] = (int16_t)constrain(errorAngleI[axis] + errorAngle, -10000, +10000); // WindUp
-                ITermACC   = (int16_t)(((int32_t)errorAngleI[axis] * cfg.I8[PIDLEVEL]) / 4096);
+                ITermACC = (int16_t)(((int32_t)errorAngleI[axis] * cfg.I8[PIDLEVEL]) / 4096);
             }
-
-            if (!f.ANGLE_MODE || f.HORIZON_MODE || axis == 2)        // MODE relying on GYRO or YAW axis
+            if (!f.ANGLE_MODE || axis == 2)
             {
-                error            = (int16_t)((int32_t)rcCommand[axis] * 80 / cfg.P8[axis]);
-                error           -= gyroData[axis];
-                PTermGYRO        = rcCommand[axis];
+                error = (int16_t)((int32_t)rcCommand[axis] * 80 / cfg.P8[axis]);
+                error -= gyroData[axis];
+                PTermGYRO = rcCommand[axis];
                 errorGyroI[axis] = (int16_t)constrain(errorGyroI[axis] + error, -16000, +16000);
                 if (abs(gyroData[axis]) > 640)
                     errorGyroI[axis] = 0;
                 ITermGYRO = (int16_t)((errorGyroI[axis] / 125 * cfg.I8[axis]) / 64.0f);
             }
-
             if (f.HORIZON_MODE && axis < 2)
             {
                 PTerm = (int16_t)((int32_t)PTermACC * (500 - prop) + (int32_t)PTermGYRO * prop) / 500;
@@ -1335,14 +1268,14 @@ void loop(void)
                     ITerm = ITermGYRO;
                 }
             }
-            PTerm         -= (int16_t)((int32_t)gyroData[axis] * dynP8[axis] / 10 / 8);
-            delta          = (int16_t)(gyroData[axis] - lastGyro[axis]);
+            PTerm -= (int16_t)((int32_t)gyroData[axis] * dynP8[axis] / 10 / 8);
+            delta = (int16_t)(gyroData[axis] - lastGyro[axis]);
             lastGyro[axis] = gyroData[axis];
-            deltaSum       = (int16_t)(delta1[axis] + delta2[axis] + delta);
-            delta2[axis]   = delta1[axis];
-            delta1[axis]   = delta;
-            DTerm          = (int16_t)(((int32_t)deltaSum * dynD8[axis])/32.0f);
-            axisPID[axis]  = PTerm + ITerm - DTerm;
+            deltaSum = (int16_t)(delta1[axis] + delta2[axis] + delta);
+            delta2[axis] = delta1[axis];
+            delta1[axis] = delta;
+            DTerm = (int16_t)(((int32_t)deltaSum * dynD8[axis])/32.0f);
+            axisPID[axis] = PTerm + ITerm - DTerm;
         }
 
     }

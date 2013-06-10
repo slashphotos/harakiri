@@ -1,9 +1,9 @@
 #include "board.h"
 #include "mw.h"
 
-uint16_t calibratingA = 0;                           // the calibration is done is the main loop. Calibrating decreases at each cycle down to 0, then we enter in a normal mode.
+uint16_t calibratingA = 0;          // the calibration is done is the main loop. Calibrating decreases at each cycle down to 0, then we enter in a normal mode.
 uint16_t calibratingG = 0;
-uint16_t acc_1G = 256;                               // this is the 1G measured acceleration.
+uint16_t acc_1G = 256;              // this is the 1G measured acceleration.
 extern uint16_t InflightcalibratingA;
 extern int16_t  AccInflightCalibrationArmed;
 extern uint16_t AccInflightCalibrationMeasurementDone;
@@ -12,29 +12,31 @@ extern uint16_t AccInflightCalibrationActive;
 extern uint16_t batteryWarningVoltage;
 extern uint8_t  batteryCellCount;
 
-sensor_t acc;                                        // acc access functions
-sensor_t gyro;                                       // gyro access functions
-baro_t   baro;                                       // barometer access functions
-uint8_t  accHardware = ACC_DEFAULT;                  // which accel chip is used/detected
+sensor_t acc;                         // acc access functions
+sensor_t gyro;                        // gyro access functions
+baro_t   baro;                        // barometer access functions
+uint8_t  accHardware = ACC_DEFAULT;   // which accel chip is used/detected
 
 #ifdef FY90Q
-void sensorsAutodetect(void)                         // FY90Q analog gyro/acc
+// FY90Q analog gyro/acc
+void sensorsAutodetect(void)
 {
     adcSensorInit(&acc, &gyro);
 }
 #else
-void sensorsAutodetect(void)                         // AfroFlight32 i2c sensors
+// AfroFlight32 i2c sensors
+void sensorsAutodetect(void)
 {
     int16_t deg, min;
     drv_adxl345_config_t acc_params;
-    uint8_t sig          = 0;
-    bool    ack          = false;
-    bool    haveMpu6k    = false;
-    bool    havel3g4200d = false;
+    bool haveMpu6k = false;
+    bool havel3g4200d = false;
 
-    if (mpu6050Detect(&acc, &gyro))                  // Autodetect gyro hardware. We have MPU3050 or MPU6050.
+    // Autodetect gyro hardware. We have MPU3050 or MPU6050.
+    if (mpu6050Detect(&acc, &gyro))
     {
-        haveMpu6k = true;                            // this filled up  acc.* struct with init values
+        // this filled up  acc.* struct with init values
+        haveMpu6k = true;
     }
     else if (l3g4200dDetect(&gyro))
     {
@@ -42,31 +44,33 @@ void sensorsAutodetect(void)                         // AfroFlight32 i2c sensors
     }
     else if (!mpu3050Detect(&gyro))
     {
-        failureMode(3);                              // if this fails, we get a beep + blink pattern. we're doomed, no gyro or i2c error.
+        // if this fails, we get a beep + blink pattern. we're doomed, no gyro or i2c error.
+        failureMode(3);
     }
 
-retry:                                               // Accelerometer. Fuck it. Let user break shit.
+    // Accelerometer. Fuck it. Let user break shit.
+retry:
     switch (cfg.acc_hardware)
     {
-    case 0:                                          // autodetect
-    case 1:                                          // ADXL345
+    case 0: // autodetect
+    case 1: // ADXL345
         acc_params.useFifo = false;
-        acc_params.dataRate = 800;                   // unused currently
+        acc_params.dataRate = 800; // unused currently
         if (adxl345Detect(&acc_params, &acc))
             accHardware = ACC_ADXL345;
         if (cfg.acc_hardware == ACC_ADXL345)
             break;
-        ;                                            // fallthrough
-    case 2:                                          // MPU6050
+        ; // fallthrough
+    case 2: // MPU6050
         if (haveMpu6k)
         {
-            mpu6050Detect(&acc, &gyro);              // yes, i'm rerunning it again.  re-fill acc struct
+            mpu6050Detect(&acc, &gyro); // yes, i'm rerunning it again.  re-fill acc struct
             accHardware = ACC_MPU6050;
             if (cfg.acc_hardware == ACC_MPU6050)
                 break;
         }
         ; // fallthrough
-    case 3:                                          // MMA8452
+    case 3: // MMA8452
         if (mma8452Detect(&acc))
         {
             accHardware = ACC_MMA8452;
@@ -75,32 +79,38 @@ retry:                                               // Accelerometer. Fuck it. 
         }
     }
 
-    if (accHardware == ACC_DEFAULT)                  // Found anything? Check if user fucked up or ACC is really missing.
+    // Found anything? Check if user fucked up or ACC is really missing.
+    if (accHardware == ACC_DEFAULT)
     {
         if (cfg.acc_hardware > ACC_DEFAULT)
         {
-            cfg.acc_hardware = ACC_DEFAULT;          // Nothing was found and we have a forced sensor type. Stupid user probably chose a sensor that isn't present.
+            // Nothing was found and we have a forced sensor type. Stupid user probably chose a sensor that isn't present.
+            cfg.acc_hardware = ACC_DEFAULT;
             goto retry;
         }
         else
         {
-            sensorsClear(SENSOR_ACC);                // We're really screwed
+            // We're really screwed
+            sensorsClear(SENSOR_ACC);
         }
     }
 
 #ifdef BARO                                          // Crashpilot Skip Baro & Mag on feature pass
+    // Detect what pressure sensors are available. baro->update() is set to sensor-specific update function
     if (!feature(FEATURE_PASS))                      // Skip this if in "pass" mode
     {
-        delay(600);                                  // Let things settle
-        ack = i2cRead(0x77, 0x77, 1, &sig);          // Check Baroadr.(MS & BMP) BMP will say hello here, MS not
-        if ( ack) ack = bmp085Detect(&baro);         // Are we really dealing with BMP?
-        if (!ack) ack = ms5611Detect(&baro);         // No, Check for MS Baro
-        if (!ack) sensorsClear(SENSOR_BARO);         // Nothing successful, Nothing on 0x77, or baro defect, or some other device
+        if (!ms5611Detect(&baro))                    // ms5611 disables BMP085, and tries to initialize + check PROM crc. if this works, we have a baro
+        {
+            if (!bmp085Detect(&baro))                // if both failed, we don't have anything
+            {
+                sensorsClear(SENSOR_BARO);
+            }
+        }
     }
-    else sensorsClear(SENSOR_BARO);                  // Don't initialize Baro in feature pass
-    
-    LandDetectMinThr = constrain(cfg.al_lndthr, cfg.minthrottle, cfg.maxthrottle);
+    else sensorsClear(SENSOR_BARO);
+    LandDetectMinThr = (uint16_t)(cfg.minthrottle + (((cfg.maxthrottle - cfg.minthrottle) / 100) * cfg.al_lndpercent));
 #endif
+
     GroundAltInitialized = false;                    // Now time to init things
     if (sensors(SENSOR_ACC)) acc.init();
     gyro.init();                                     // this is safe because either mpu6050 or mpu3050 or lg3d20 sets it, and in case of fail, we never get here.
@@ -126,7 +136,7 @@ retry:                                               // Accelerometer. Fuck it. 
 
     deg = cfg.mag_declination / 100;                 // calculate magnetic declination
     min = cfg.mag_declination % 100;
-    magneticDeclination = ((float)deg + ((float)min / 60.0f)); // heading is in decimaldeg units NO 0.1 deg shit here
+    magneticDeclination = ((float)deg + ((float)min / 60.0f)); // heading is in deg units no 0.1 deg shit
 }
 #endif
 
@@ -164,9 +174,9 @@ void batteryInit(void)
 // ALIGN_GYRO = 0,
 // ALIGN_ACCEL = 1,
 // ALIGN_MAG = 2
-void alignSensors(uint8_t type, int16_t *data)
+static void alignSensors(uint8_t type, int16_t *data)
 {
-    uint8_t i;
+    int i;
     int16_t tmp[3];
 
     tmp[0] = data[0];                                             // make a copy :(
@@ -279,13 +289,17 @@ void ACC_getADC(void)
 #ifdef BARO
 void Baro_update(void)
 {
-    static float    BaroSpikeTab[5];
+    static int32_t BaroSpikeTab[5];                               // CRASHPILOT SPIKEFILTER Vars Start
+    int32_t extmp;
+    uint8_t rdy;
+    uint8_t sortidx;
+    uint8_t maxsortidx;                                           // CRASHPILOT SPIKEFILTER Vars End
     static uint32_t baroDeadline = 0;
     static uint32_t LastBaroTime;
-    static uint8_t  state = 0;
-    float           tmp0, pressure, extmp;
-    uint8_t         rdy, sortidx, maxsortidx;
-    uint32_t        TimeNowMicros;
+    static uint8_t state = 0;
+    int32_t pressure;
+    uint32_t acttime;
+    float PressureTMP;
 
     newbaroalt = 0;                                               // Reset Newbarovalue since it's iterative and not interrupt driven it's OK
     if (micros() < baroDeadline) return;
@@ -293,46 +307,46 @@ void Baro_update(void)
     {
     case 0:
         baro.start_ut();                                          // Temperature Conversion start
-        baroDeadline =  micros() + baro.ut_delay - 1;
         state++;
+        baroDeadline =  micros() + baro.ut_delay - 1;
         break;
     case 1:                                                       // Crashpilot: reduced one case
         baro.get_ut();                                            // Readout Temp
         baro.start_up();                                          // Pressure Conversion start
-        baroDeadline =  micros() + baro.up_delay - 1;
         state++;
+        baroDeadline =  micros() + baro.up_delay - 1;
         break;
     case 2:
         baro.get_up();                                            // Readout Pressure
-        pressure        = baro.calculate();
-        TimeNowMicros   = micros();                               // Do timestuff
-        BaroDeltaTime   = TimeNowMicros - LastBaroTime;           // Real timediff of Barodata
-        LastBaroTime    = TimeNowMicros;
-        baroDeadline    = TimeNowMicros + baro.repeat_delay -1;   // Don't take Spikefilter into account for delay
-        extmp           = pressure;                               // Feed the Spikefilter beast
+        pressure = baro.calculate();
+        acttime = micros();                                       // Do timestuff
+        BaroDeltaTime = acttime-LastBaroTime;                     // Real timediff of Barodata
+        LastBaroTime = acttime;
+        baroDeadline = acttime + baro.repeat_delay -1;            // Don't take Spikefilter into account for delay
+        extmp = pressure;                                         // CRASHPILOT SPIKEFILTER START
         BaroSpikeTab[4] = extmp;                                  // feed both ends of array with new data
         BaroSpikeTab[0] = extmp;                                  // feed both ends of array with new data
-        rdy             = 0;
-        maxsortidx      = 4;
+        rdy = 0;
+        maxsortidx = 4;
         while(rdy == 0)
         {
             rdy = 1;
-            for (sortidx = 0; sortidx < maxsortidx; sortidx++)
+            for (sortidx = 0; sortidx<maxsortidx; sortidx++)
             {
                 extmp = BaroSpikeTab[sortidx];
                 if (extmp > BaroSpikeTab[sortidx+1])
                 {
-                    BaroSpikeTab[sortidx]   = BaroSpikeTab[sortidx+1];
+                    BaroSpikeTab[sortidx] = BaroSpikeTab[sortidx+1];
                     BaroSpikeTab[sortidx+1] = extmp;
                     rdy = 0;
                 }
             }
             maxsortidx --;
         }
-        if(GroundAltInitialized) pressure = BaroSpikeTab[2];      // Do Groundalt with raw values to prevent runup from old sikefilter value
-        tmp0       = pressure / 101325.0f;
-        BaroAlt    = (1.0f - pow(tmp0, 0.190295f)) * 4433000.0f;  // Centimeter. Actual mwii/bf does it the apm way, no doubt it's faster but better? I stick to the slower, more precise method.
-        state      = 0;
+        pressure = BaroSpikeTab[2];                               // CRASHPILOT SPIKEFILTER END
+        PressureTMP = (float)pressure / 101325.0f;
+        BaroAlt = (1.0f-pow(PressureTMP, 0.190295f))*4433000.0f;  // centimeter
+        state = 0;
         newbaroalt = 1;
         break;
     }
@@ -443,20 +457,24 @@ void Gyro_getADC(void)
 #ifdef SONAR
 void Sonar_init(void)                                                                 // 0 = PWM56, 1 = RC78, 2 = I2C (DaddyWalross), 3 = MBPWM56, 4 = MBRC78
 {
-    uint8_t utmp8;
+    uint16_t utmp16;
     bool Inisuccess = false;
     switch (cfg.snr_type)
     {
     case 0:
-    case 3:
         Inisuccess = hcsr04_init(sonar_pwm56);
         break;
     case 1:
-    case 4:
         Inisuccess = hcsr04_init(sonar_rc78);
         break;
     case 2:
         Inisuccess = hcsr04_init(sonar_i2cDW);
+        break;
+    case 3:
+        Inisuccess = hcsr04_init(sonar_pwm56);
+        break;      
+    case 4:
+        Inisuccess = hcsr04_init(sonar_rc78);
         break;
     }
     
@@ -471,11 +489,11 @@ void Sonar_init(void)                                                           
         }
         if (cfg.snr_min > cfg.snr_max)                                                // OMG User mixed up min & max
         {
-            utmp8 = cfg.snr_max;                                                      // Swap values 8 bit is sufficient snr_min (0...200)
+            utmp16 = cfg.snr_max;                                                     // Swap values
             cfg.snr_max = cfg.snr_min;
-            cfg.snr_min = utmp8;
+            cfg.snr_min = utmp16;
         }
-        if (cfg.snr_type == 0 || cfg.snr_type == 1 || cfg.snr_type == 2)              // Check for HC-SR04
+        if (cfg.snr_type == 0 || cfg.snr_type == 1)                                   // Check for HC-SR04
         {
             if (cfg.snr_min < 5)   cfg.snr_min = 5;                                   // Adjust snr_min for HC-SR04
             if (cfg.snr_max > 400) cfg.snr_max = 400;                                 // Adjust snr_max for HC-SR04
@@ -518,7 +536,6 @@ void Sonar_update(void)
 
     if (newdata)                                                                      // 100 ms with Maxbotix, 60ms with HC-SR04
     {
-        if (cfg.snr_debug == 1) debug[2] = sonarAlt;                                  // Debug 2 contains raw sonaralt
         tilt = 100 - constrain(TiltValue * 100.0f, 0, 100.0f);                        // We don't care for upsidedownstuff, because althold is disabled than anyway
         if (cfg.snr_debug == 1) debug[1] = tilt;                                      // Prints out Tiltangle, but actually not degrees, 90 Degrees will be 100
         if (sonarAlt >= cfg.snr_min && sonarAlt <= cfg.snr_max && tilt < cfg.snr_tilt)
@@ -592,12 +609,13 @@ void Mag_init(void)                                               // initialize 
     calibstyle = cfg.mag_oldcalib;                                // if 1 then the old hardironstuff is executed, its also a fallback
 }
 
-static void Mag_getRawADC(void)                                   // Read aligned
+static void Mag_getRawADC(void)
 {
     int16_t magADC[3];
     uint8_t i;
-    hmc5883lRead(magADC);                                         // Does that now: alignSensors(ALIGN_MAG, magADC);
-    for (i = 0; i < 3; i++) magADCfloat[i] = (float)magADC[i];    // Put into floats
+    hmc5883lRead(magADC);
+    alignSensors(ALIGN_MAG, magADC);
+    for (i = 0; i < 3; i++) magADCfloat[i] = (float)magADC[i];
 }
 
 int Mag_getADC(void)
@@ -609,7 +627,7 @@ int Mag_getADC(void)
     if (TimeNow < TenHzTimer) return 0;                           // each read is spaced by 100ms. Signalize nothing was done with 0
     TenHzTimer = TimeNow + 100000;
 
-    Mag_getRawADC();                                              // Read mag sensor with orientation correction do nothing more for now
+    Mag_getRawADC();                                              // Read mag sensor with correct orientation do nothing more for now
 
     if (f.CALIBRATE_MAG) magInit = 0;                             // Dont use wrong BIAS because we are asked to calibrate that
 
@@ -696,7 +714,7 @@ bool Mag_Calibration(uint8_t oldstyle)                            // Called from
             cfg.sphere_radius = sphere_radius;                    // What do we make of sphere_radius? Anything? Save it in config, maybe useful later?
             CalibrationStatus = true;
         }
-        
+
     }
     else                                                          // Here comes somehow the old calibration from mwii/BF
     {
@@ -761,23 +779,31 @@ bool Mag_Calibration(uint8_t oldstyle)                            // Called from
  ****************************************************************************/
 int sphere_fit_least_squares(const float x[], const float y[], const float z[], uint16_t size, uint16_t max_iterations, float delta, float *sphere_x, float *sphere_y, float *sphere_z, float *sphere_radius)
 {
-    uint16_t i, n;
-    float x_sumplain = 0.0f, x_sumsq = 0.0f, x_sumcube = 0.0f, y_sumplain = 0.0f, y_sumsq = 0.0f;
-    float y_sumcube = 0.0f, z_sumplain = 0.0f, z_sumsq = 0.0f, z_sumcube = 0.0f, xy_sum = 0.0f;
-    float xz_sum = 0.0f, yz_sum = 0.0f, x2y_sum = 0.0f, x2z_sum = 0.0f, y2x_sum = 0.0f, y2z_sum = 0.0f;
-    float z2x_sum = 0.0f, z2y_sum = 0.0f, x2 = 0.0f, y2 = 0.0f, z2 = 0.0f, x_sum = 0.0f, x_sum2 = 0.0f;
-    float x_sum3 = 0.0f, y_sum = 0.0f, y_sum2 = 0.0f, y_sum3 = 0.0f, z_sum = 0.0f, z_sum2 = 0.0f, z_sum3 = 0.0f;
-    float XY = 0.0f, XZ = 0.0f, YZ = 0.0f, X2Y = 0.0f, X2Z = 0.0f, Y2X = 0.0f, Y2Z = 0.0f, Z2X = 0.0f, Z2Y = 0.0f;
-    float F0 = 0.0f, F1 = 0.0f, F2 = 0.0f, F3 = 0.0f, F4 = 0.0f, A = 0.0f, B = 0.0f, C = 0.0f, A2 = 0.0f, B2 = 0.0f;
-    float C2 = 0.0f, QS = 0.0f, QB = 0.0f, Rsq = 0.0f, Q0 = 0.0f, Q1 = 0.0f, Q2 = 0.0f, aA = 0.0f, aB = 0.0f, aC = 0.0f;
-    float nA = 0.0f, nB = 0.0f, nC = 0.0f, dA = 0.0f, dB = 0.0f, dC = 0.0f;
-    
-  
+    uint16_t i;
+    float x_sumplain = 0.0f;
+    float x_sumsq    = 0.0f;
+    float x_sumcube  = 0.0f;
+    float y_sumplain = 0.0f;
+    float y_sumsq    = 0.0f;
+    float y_sumcube  = 0.0f;
+    float z_sumplain = 0.0f;
+    float z_sumsq    = 0.0f;
+    float z_sumcube  = 0.0f;
+    float xy_sum     = 0.0f;
+    float xz_sum     = 0.0f;
+    float yz_sum     = 0.0f;
+    float x2y_sum    = 0.0f;
+    float x2z_sum    = 0.0f;
+    float y2x_sum    = 0.0f;
+    float y2z_sum    = 0.0f;
+    float z2x_sum    = 0.0f;
+    float z2y_sum    = 0.0f;
+
     for (i = 0; i < size; i++)
     {
-        x2 = x[i] * x[i];
-        y2 = y[i] * y[i];
-        z2 = z[i] * z[i];
+        float x2 = x[i] * x[i];
+        float y2 = y[i] * y[i];
+        float z2 = z[i] * z[i];
         x_sumplain += x[i];
         x_sumsq += x2;
         x_sumcube += x2 * x[i];
@@ -815,54 +841,55 @@ int sphere_fit_least_squares(const float x[], const float y[], const float z[], 
     //
     //This method should converge; maybe 5-100 iterations or more.
     //
-    x_sum  = x_sumplain / size;    //sum( X[n] )
-    x_sum2 = x_sumsq    / size;    //sum( X[n]^2 )
-    x_sum3 = x_sumcube  / size;    //sum( X[n]^3 )
-    y_sum  = y_sumplain / size;    //sum( Y[n] )
-    y_sum2 = y_sumsq    / size;    //sum( Y[n]^2 )
-    y_sum3 = y_sumcube  / size;    //sum( Y[n]^3 )
-    z_sum  = z_sumplain / size;    //sum( Z[n] )
-    z_sum2 = z_sumsq    / size;    //sum( Z[n]^2 )
-    z_sum3 = z_sumcube  / size;    //sum( Z[n]^3 )
-    XY     = xy_sum     / size;    //sum( X[n] * Y[n] )
-    XZ     = xz_sum     / size;    //sum( X[n] * Z[n] )
-    YZ     = yz_sum     / size;    //sum( Y[n] * Z[n] )
-    X2Y    = x2y_sum    / size;    //sum( X[n]^2 * Y[n] )
-    X2Z    = x2z_sum    / size;    //sum( X[n]^2 * Z[n] )
-    Y2X    = y2x_sum    / size;    //sum( Y[n]^2 * X[n] )
-    Y2Z    = y2z_sum    / size;    //sum( Y[n]^2 * Z[n] )
-    Z2X    = z2x_sum    / size;    //sum( Z[n]^2 * X[n] )
-    Z2Y    = z2y_sum    / size;    //sum( Z[n]^2 * Y[n] )
+    float x_sum  = x_sumplain / size;    //sum( X[n] )
+    float x_sum2 = x_sumsq    / size;    //sum( X[n]^2 )
+    float x_sum3 = x_sumcube  / size;    //sum( X[n]^3 )
+    float y_sum  = y_sumplain / size;    //sum( Y[n] )
+    float y_sum2 = y_sumsq    / size;    //sum( Y[n]^2 )
+    float y_sum3 = y_sumcube  / size;    //sum( Y[n]^3 )
+    float z_sum  = z_sumplain / size;    //sum( Z[n] )
+    float z_sum2 = z_sumsq    / size;    //sum( Z[n]^2 )
+    float z_sum3 = z_sumcube  / size;    //sum( Z[n]^3 )
+    float XY     = xy_sum     / size;    //sum( X[n] * Y[n] )
+    float XZ     = xz_sum     / size;    //sum( X[n] * Z[n] )
+    float YZ     = yz_sum     / size;    //sum( Y[n] * Z[n] )
+    float X2Y    = x2y_sum    / size;    //sum( X[n]^2 * Y[n] )
+    float X2Z    = x2z_sum    / size;    //sum( X[n]^2 * Z[n] )
+    float Y2X    = y2x_sum    / size;    //sum( Y[n]^2 * X[n] )
+    float Y2Z    = y2z_sum    / size;    //sum( Y[n]^2 * Z[n] )
+    float Z2X    = z2x_sum    / size;    //sum( Z[n]^2 * X[n] )
+    float Z2Y    = z2y_sum    / size;    //sum( Z[n]^2 * Y[n] )
 
     //Reduction of multiplications
-     F0 = x_sum2 + y_sum2 + z_sum2;
-     F1 =  0.5f * F0;
-     F2 = -8.0f * (x_sum3 + Y2X + Z2X);
-     F3 = -8.0f * (X2Y + y_sum3 + Z2Y);
-     F4 = -8.0f * (X2Z + Y2Z + z_sum3);
+    float F0 = x_sum2 + y_sum2 + z_sum2;
+    float F1 =  0.5f * F0;
+    float F2 = -8.0f * (x_sum3 + Y2X + Z2X);
+    float F3 = -8.0f * (X2Y + y_sum3 + Z2Y);
+    float F4 = -8.0f * (X2Z + Y2Z + z_sum3);
 
     //Set initial conditions:
-     A = x_sum;
-     B = y_sum;
-     C = z_sum;
+    float A = x_sum;
+    float B = y_sum;
+    float C = z_sum;
 
     //First iteration computation:
-     A2 = A * A;
-     B2 = B * B;
-     C2 = C * C;
-     QS = A2 + B2 + C2;
-     QB = -2.0f * (A * x_sum + B * y_sum + C * z_sum);
+    float A2 = A * A;
+    float B2 = B * B;
+    float C2 = C * C;
+    float QS = A2 + B2 + C2;
+    float QB = -2.0f * (A * x_sum + B * y_sum + C * z_sum);
 
     //Set initial conditions:
-     Rsq = F0 + QB + QS;
+    float Rsq = F0 + QB + QS;
 
     //First iteration computation:
-     Q0 = 0.5f * (QS - Rsq);
-     Q1 = F1 + Q0;
-     Q2 = 8.0f * (QS - Rsq + QB + F0);
+    float Q0 = 0.5f * (QS - Rsq);
+    float Q1 = F1 + Q0;
+    float Q2 = 8.0f * (QS - Rsq + QB + F0);
+    float aA, aB, aC, nA, nB, nC, dA, dB, dC;
 
     //Iterate N times, ignore stop condition.
-    n = 0;
+    int n = 0;
 
     while (n < max_iterations)
     {
@@ -912,19 +939,3 @@ int sphere_fit_least_squares(const float x[], const float y[], const float z[], 
     return 0;
 }
 #endif
-
-/*
-OLD UNUSED STUFF
-    // Detect what pressure sensors are available. baro->update() is set to sensor-specific update function
-    if (!feature(FEATURE_PASS))                      // Skip this if in "pass" mode
-    {
-        if (!ms5611Detect(&baro))                    // ms5611 disables BMP085, and tries to initialize + check PROM crc. if this works, we have a baro
-        {
-            if (!bmp085Detect(&baro))                // if both failed, we don't have anything
-            {
-                sensorsClear(SENSOR_BARO);
-            }
-        }
-    }
-    else sensorsClear(SENSOR_BARO);
-*/
