@@ -126,7 +126,8 @@ retry:                                               // Accelerometer. Fuck it. 
 
     deg = cfg.mag_declination / 100;                 // calculate magnetic declination
     min = cfg.mag_declination % 100;
-    magneticDeclination = ((float)deg + ((float)min / 60.0f)); // heading is in decimaldeg units NO 0.1 deg shit here
+//    magneticDeclination = ((float)deg + ((float)min / 60.0f)); // heading is in deg units no 0.1 deg shit
+    magneticDeclination = ((float)deg + ((float)min * (1.0f / 60.0f))) * 10; // heading is in 0.1deg units
 }
 #endif
 
@@ -164,9 +165,9 @@ void batteryInit(void)
 // ALIGN_GYRO = 0,
 // ALIGN_ACCEL = 1,
 // ALIGN_MAG = 2
-void alignSensors(uint8_t type, int16_t *data)
+static void alignSensors(uint8_t type, int16_t *data)
 {
-    uint8_t i;
+    int i;
     int16_t tmp[3];
 
     tmp[0] = data[0];                                             // make a copy :(
@@ -279,13 +280,17 @@ void ACC_getADC(void)
 #ifdef BARO
 void Baro_update(void)
 {
-    static float    BaroSpikeTab[5];
+    static int32_t BaroSpikeTab[5];                               // CRASHPILOT SPIKEFILTER Vars Start
+    int32_t extmp;
+    uint8_t rdy;
+    uint8_t sortidx;
+    uint8_t maxsortidx;                                           // CRASHPILOT SPIKEFILTER Vars End
     static uint32_t baroDeadline = 0;
     static uint32_t LastBaroTime;
-    static uint8_t  state = 0;
-    float           tmp0, pressure, extmp;
-    uint8_t         rdy, sortidx, maxsortidx;
-    uint32_t        TimeNowMicros;
+    static uint8_t state = 0;
+    int32_t pressure;
+    uint32_t acttime;
+    float PressureTMP;
 
     newbaroalt = 0;                                               // Reset Newbarovalue since it's iterative and not interrupt driven it's OK
     if (micros() < baroDeadline) return;
@@ -293,46 +298,46 @@ void Baro_update(void)
     {
     case 0:
         baro.start_ut();                                          // Temperature Conversion start
-        baroDeadline =  micros() + baro.ut_delay - 1;
         state++;
+        baroDeadline =  micros() + baro.ut_delay - 1;
         break;
     case 1:                                                       // Crashpilot: reduced one case
         baro.get_ut();                                            // Readout Temp
         baro.start_up();                                          // Pressure Conversion start
-        baroDeadline =  micros() + baro.up_delay - 1;
         state++;
+        baroDeadline =  micros() + baro.up_delay - 1;
         break;
     case 2:
         baro.get_up();                                            // Readout Pressure
-        pressure        = baro.calculate();
-        TimeNowMicros   = micros();                               // Do timestuff
-        BaroDeltaTime   = TimeNowMicros - LastBaroTime;           // Real timediff of Barodata
-        LastBaroTime    = TimeNowMicros;
-        baroDeadline    = TimeNowMicros + baro.repeat_delay -1;   // Don't take Spikefilter into account for delay
-        extmp           = pressure;                               // Feed the Spikefilter beast
+        pressure = baro.calculate();
+        acttime = micros();                                       // Do timestuff
+        BaroDeltaTime = acttime-LastBaroTime;                     // Real timediff of Barodata
+        LastBaroTime = acttime;
+        baroDeadline = acttime + baro.repeat_delay -1;            // Don't take Spikefilter into account for delay
+        extmp = pressure;                                         // CRASHPILOT SPIKEFILTER START
         BaroSpikeTab[4] = extmp;                                  // feed both ends of array with new data
         BaroSpikeTab[0] = extmp;                                  // feed both ends of array with new data
-        rdy             = 0;
-        maxsortidx      = 4;
+        rdy = 0;
+        maxsortidx = 4;
         while(rdy == 0)
         {
             rdy = 1;
-            for (sortidx = 0; sortidx < maxsortidx; sortidx++)
+            for (sortidx = 0; sortidx<maxsortidx; sortidx++)
             {
                 extmp = BaroSpikeTab[sortidx];
                 if (extmp > BaroSpikeTab[sortidx+1])
                 {
-                    BaroSpikeTab[sortidx]   = BaroSpikeTab[sortidx+1];
+                    BaroSpikeTab[sortidx] = BaroSpikeTab[sortidx+1];
                     BaroSpikeTab[sortidx+1] = extmp;
                     rdy = 0;
                 }
             }
             maxsortidx --;
         }
-        if(GroundAltInitialized) pressure = BaroSpikeTab[2];      // Do Groundalt with raw values to prevent runup from old sikefilter value
-        tmp0       = pressure / 101325.0f;
-        BaroAlt    = (1.0f - pow(tmp0, 0.190295f)) * 4433000.0f;  // Centimeter. Actual mwii/bf does it the apm way, no doubt it's faster but better? I stick to the slower, more precise method.
-        state      = 0;
+        pressure = BaroSpikeTab[2];                               // CRASHPILOT SPIKEFILTER END
+        PressureTMP = (float)pressure / 101325.0f;
+        BaroAlt = (1.0f-pow(PressureTMP, 0.190295f))*4433000.0f;  // centimeter
+        state = 0;
         newbaroalt = 1;
         break;
     }
@@ -592,12 +597,13 @@ void Mag_init(void)                                               // initialize 
     calibstyle = cfg.mag_oldcalib;                                // if 1 then the old hardironstuff is executed, its also a fallback
 }
 
-static void Mag_getRawADC(void)                                   // Read aligned
+static void Mag_getRawADC(void)
 {
     int16_t magADC[3];
     uint8_t i;
-    hmc5883lRead(magADC);                                         // Does that now: alignSensors(ALIGN_MAG, magADC);
-    for (i = 0; i < 3; i++) magADCfloat[i] = (float)magADC[i];    // Put into floats
+    hmc5883lRead(magADC);
+    alignSensors(ALIGN_MAG, magADC);
+    for (i = 0; i < 3; i++) magADCfloat[i] = (float)magADC[i];
 }
 
 int Mag_getADC(void)
@@ -609,7 +615,7 @@ int Mag_getADC(void)
     if (TimeNow < TenHzTimer) return 0;                           // each read is spaced by 100ms. Signalize nothing was done with 0
     TenHzTimer = TimeNow + 100000;
 
-    Mag_getRawADC();                                              // Read mag sensor with orientation correction do nothing more for now
+    Mag_getRawADC();                                              // Read mag sensor with correct orientation do nothing more for now
 
     if (f.CALIBRATE_MAG) magInit = 0;                             // Dont use wrong BIAS because we are asked to calibrate that
 

@@ -129,18 +129,19 @@ static void resetConf(void)
 {
     int i;
     const int8_t default_align[3][3] = { /* GYRO */ { 0, 0, 0 }, /* ACC */ { 0, 0, 0 }, /* MAG */ { -2, -3, 1 } };
+
     memset(&cfg, 0, sizeof(config_t));
 
     cfg.version = EEPROM_CONF_VERSION;
     cfg.mixerConfiguration = MULTITYPE_QUADX;
     featureClearAll();
 //    featureSet(FEATURE_VBAT);
-    featureSet(FEATURE_PPM);                    // Crashpilot
+//    featureSet(FEATURE_PPM);                    // Crashpilot
 //    featureSet(FEATURE_FAILSAFE);               // Crashpilot
-    featureSet(FEATURE_LCD);                    // Crashpilot
-    featureSet(FEATURE_GPS);                    // Crashpilot
+//    featureSet(FEATURE_LCD);                    // Crashpilot
+//    featureSet(FEATURE_GPS);                    // Crashpilot
 //    featureSet(FEATURE_PASS);                   // Just pass Throttlechannel Crashpilot
-    featureSet(FEATURE_SONAR);
+//    featureSet(FEATURE_SONAR);
 
     cfg.P8[ROLL]                  = 40;
     cfg.I8[ROLL]                  = 20;
@@ -163,7 +164,7 @@ static void resetConf(void)
 
     cfg.P8[PIDPOSR]               = 50;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
     cfg.I8[PIDPOSR]               = 0;          // DANGER "I" may lead to circeling   // Controls the speed part with my PH logic
-    cfg.D8[PIDPOSR]               = 40;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
+    cfg.D8[PIDPOSR]               = 50;         // FIND YOUR VALUE                    // Controls the speed part with my PH logic
 
     cfg.P8[PIDNAVR]               = 20;         // More ?
     cfg.I8[PIDNAVR]               = 20;         // NAV_I * 100;                       // Scaling/Purpose unchanged
@@ -235,8 +236,7 @@ static void resetConf(void)
     cfg.deadband                  = 15;         // Crashpilot: A little deadband will not harm our crappy RC
     cfg.yawdeadband               = 15;         // Crashpilot: A little deadband will not harm our crappy RC
     cfg.alt_hold_throttle_neutral = 50;         // Crashpilot: A little deadband will not harm our crappy RC
-    cfg.gps_adddb                 = 5;          // Additional Deadband for all GPS functions;
-    cfg.hdfreeangle               = 0;          // +-30 Degree Adjust Headfree for whatever reason you might want that
+    cfg.gps_adddb                 = 10;         // Additional Deadband for all GPS functions;
 
     // cfg.spektrum_hires = 0;
     cfg.midrc                     = 1500;
@@ -247,8 +247,8 @@ static void resetConf(void)
     cfg.killswitchtime            = 0;          // Time in ms when your arm switch becomes a Killswitch, 0 disables the Killswitch, can not be used together with FEATURE_INFLIGHT_ACC_CAL
 
     // Motor/ESC/Servo
-//    cfg.minthrottle               = 1150;       // ORIG
-    cfg.minthrottle               = 1100;
+    cfg.minthrottle               = 1150;       // ORIG
+//    cfg.minthrottle               = 1100;
     cfg.maxthrottle               = 1950;
     cfg.passmotor                 = 0;          // Crashpilot: Only used with feature pass. If 0 = all Motors, otherwise specific Motor
     cfg.mincommand                = 1000;
@@ -286,16 +286,16 @@ static void resetConf(void)
 
     // gps/nav
     cfg.gps_type                  = 1;          // GPS_NMEA = 0, GPS_UBLOX = 1, GPS_MTK16 = 2, GPS_MTK19 = 3, GPS_UBLOX_DUMB = 4
-    cfg.gps_baudrate              = 115200;     //38400; // Changed 8/6/13 to 115200;
+    cfg.gps_baudrate              = 38400;      // Changed 5/3/13 was 115200;
+    cfg.gps_debug                 = 0;          // Prints out the raw GPS values in GUI for testing
     cfg.gps_ins_vel               = 0.72f;      // Crashpilot GPS INS The LOWER the value the closer to gps speed // Dont go to high here
-    cfg.gps_lag                   = 1500;       // GPS Lag in ms
-    cfg.gps_phase                 = 0;          // +-30 Degree Make a phaseshift of GPS output for whatever reason you might want that (frametype etc)
+    cfg.gps_lag                   = 1.0f;       // This is to overcome GPS LAG, currently just used to project GPS on PH - moving
+    cfg.gps_phase                 = 0;          // Make a phaseshift +-90 Deg max of GPS output
     cfg.gps_ph_minsat             = 6;          // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
-    cfg.gps_ph_settlespeed        = 10;         // 1-200 cm/s PH settlespeed in cm/s
-    cfg.gps_ph_brakemaxangle      = 6;          // 1 - 45 Degree Maximal 5 Degree Overspeedbrake
-    cfg.gps_ph_minbrakeangle      = 50;         // 1-99% minimal percent of "brakemaxangle" left over for braking. Example brakemaxangle = 6 so 50 Percent is 3..
-    cfg.gps_ph_forcetimeout       = 4000;       // 1000 - 10000ms (1-10s) Time in ms when absolute PH is forced
-    cfg.gps_maxangle              = 25;         // 10 - 45 Degree Maximal over all GPS bank angle
+    cfg.gps_ph_settlespeed        = 60;         // PH settlespeed in cm/s
+    cfg.gps_ph_targetsqrt         = 1;          // This is the speed target of PH. That means if the copter moves faster than that, the maximal tiltangle reduced dramatically. Just think of the value as a working point for the sqrt brake
+    cfg.gps_minanglepercent       = 45;         // Percent 1 - 100% of gps_maxangle for minimal tilt, as lower limit for "gps_ph_targetsqrt"
+    cfg.gps_maxangle              = 25;         // maximal over all GPS bank angle
     cfg.gps_wp_radius             = 200;
     cfg.gps_rtl_minhight          = 20;         // (0-200) Minimal RTL hight in m, 0 disables feature
 //	  cfg.gps_rtl_minhight          = 0;          // (0-200) Minimal RTL hight in m, 0 disables feature
@@ -369,7 +369,7 @@ static void resetConf(void)
     cfg.snr_max                   = 200;        // Valid Sonar maximal range in cm (50-700)
     cfg.snr_debug                 = 0;          // 1 Sends Sonardata (within defined range and tilt) to debug[0] and tiltvalue to debug[1], debug[0] will be -1 if out of range/tilt. debug[2] contains raw sonaralt, like before
     cfg.snr_tilt                  = 18;         // Somehow copter tiltrange in degrees (Not exactly but good enough. Value * 0.9 = realtilt) in wich Sonar is possible
-    cfg.snr_cf                    = 0.7f;       // The bigger, the more Sonarinfluence, makes switch between Baro/Sonar smoother and defines baroinfluence when sonarcontact. 1.0f just takes Sonar, if contact (otherwise baro)
+    cfg.snr_cf                    = 0.6f;       // The bigger, the more Sonarinfluence, makes switch between Baro/Sonar smoother and defines baroinfluence when sonarcontact. 1.0f just takes Sonar, if contact (otherwise baro)
     cfg.snr_diff                  = 0;          // 0 disables that check. Range (0-200) Maximal allowed difference in cm between sonar readouts (100ms rate and snr_diff = 50 means max 5m/s)
     cfg.snr_land                  = 1;          // Aided Sonar - landing, by setting upper throttle limit to current throttle. - Beware of Trees!! Can be disabled for Failsafe with failsafe_ignoreSNR = 1
     // custom mixer. clear by defaults.

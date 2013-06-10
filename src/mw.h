@@ -4,7 +4,7 @@
 #define VBATFREQ 6                          // to read battery voltage - nth number of loop iterations
 
 #define  VERSION  211
-#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10 Mechagodzilla II " __DATE__ " / " __TIME__
+#define  FIRMWARE  "Naze32 cGiesen/Crashpilot Harakiri10 Mechagodzilla III " __DATE__ " / " __TIME__
 #define  FIRMWAREFORLCD "Harakiri 10"
 
 #define LAT  0
@@ -192,7 +192,6 @@ typedef struct config_t
     uint8_t  yawdeadband;                   // introduce a deadband around the stick center for yaw axis. Must be greater than zero.
     uint8_t  alt_hold_throttle_neutral;     // defines the neutral zone of throttle stick during altitude hold, default setting is +/-20
     uint8_t  gps_adddb;                     // Additional Deadband for all GPS functions;
-    int8_t   hdfreeangle;                   // +-30 Degree Adjust Headfree
     uint8_t  spektrum_hires;                // spektrum high-resolution y/n (1024/2048bit)
     uint16_t midrc;                         // Some radios have not a neutral point centered on 1500. can be changed here
     uint16_t mincheck;                      // minimum rc end
@@ -258,16 +257,16 @@ typedef struct config_t
     // gps-related stuff
     uint8_t  gps_type;                      // Type of GPS hardware. 0: NMEA 1: UBX 2+ ??
     float    gps_ins_vel;                   // Crashpilot: Value for complementary filter INS and GPS Velocity
-    uint16_t gps_lag;                       // GPS Lag in ms
-    int8_t   gps_phase;                     // Make a phaseshift +-30 Deg max of GPS output
+    float    gps_lag;                       // This is the assumed time of GPS Lag, Ublox is supposed to be 0.8 sec behind
+    float    gps_phase;                     // Make a phaseshift +-90 Deg max of GPS output
     uint8_t  acc_ins_lpf;                   // ACC lowpass for Acc GPS INS
     uint8_t  gps_ph_minsat;                 // Minimal Satcount for PH, PH on RTL is still done with 5Sats or more
-    uint8_t  gps_ph_settlespeed;            // PH settlespeed in cm/s
+    uint16_t gps_ph_settlespeed;            // PH settlespeed in cm/s
+    uint16_t gps_ph_targetsqrt;             // This is the speed target of PH. That means if the copter moves faster than that, the maximal tiltangle reduced dramatically
     uint8_t  gps_maxangle;                  // maximal over all GPS bank angle
-    uint8_t  gps_ph_brakemaxangle;          // Maximal 5 Degree Overspeedbrake
-    uint8_t  gps_ph_minbrakeangle;          // 1-99% minimal percent of "brakemaxangle" left over for braking. Example brakemaxangle = 6 so 50 Percent is 3..
-    uint16_t gps_ph_forcetimeout;           // 1000 - 10000ms (1-10s) Time in ms when absolute PH is forced
+    uint8_t  gps_minanglepercent;           // Percent 1-100% of gps_maxangle for minimal tilt, as lower limit for "gps_ph_targetsqrt"
     uint32_t gps_baudrate;                  // GPS baudrate
+    uint8_t  gps_debug;                     // Prints out the raw GPS values in GUI for testing
     uint16_t gps_wp_radius;                 // if we are within this distance to a waypoint then we consider it reached (distance is in cm)
     uint8_t  gps_rtl_mindist;               // Minimal distance for RTL, otherwise it will just autoland, prevent Failsafe jump in your face, when arming copter and turning off TX
     uint8_t  gps_rtl_flyaway;               // If during RTL the distance increases beyond this valus in meters, something is wrong, autoland
@@ -348,7 +347,7 @@ extern uint16_t calibratingA;
 extern uint16_t calibratingG;
 
 extern int16_t  annex650_overrun_count;
-extern float    BaroAlt;
+extern int32_t  BaroAlt;
 extern int16_t  sonarAlt;
 extern int32_t  EstAlt;
 extern int32_t  AltHold;
@@ -385,6 +384,7 @@ extern uint16_t LandDetectMinThr;           // Is set upon Baro initialization
 
 // GPS stuff
 extern int32_t  GPS_coord[2];
+extern int32_t  Real_GPS_coord[2];          // Pure GPS Coords
 extern int32_t  GPS_home[2];
 extern int32_t  GPS_WP[2];                  // Currently used WP
 extern uint8_t  GPS_numSat;
@@ -438,7 +438,6 @@ void     sensorsAutodetect(void);
 void     batteryInit(void);
 uint16_t batteryAdcToVoltage(uint16_t src);
 void     ACC_getADC(void);
-void     alignSensors(uint8_t type, int16_t *data);
 void     Baro_update(void);
 void     Gyro_getADC(void);
 void     Mag_init(void);
