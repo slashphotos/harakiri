@@ -270,8 +270,8 @@ static void resetConf(void)
     cfg.wing_left_max             = 2000;
     cfg.wing_right_min            = 1020;
     cfg.wing_right_mid            = 1500;
-    cfg.wing_right_max            = 2000; moved to ServoConf Johannes*/
-    /*cfg.pitch_direction_l         = 1;
+    cfg.wing_right_max            = 2000; moved to ServoConf Johannes
+    cfg.pitch_direction_l         = 1;
     cfg.pitch_direction_r         = -1;
     cfg.roll_direction_l          = 1;
     cfg.roll_direction_r          = 1;moved to ServoConf Johannes*/

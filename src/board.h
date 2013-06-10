@@ -187,5 +187,6 @@ typedef struct baro_t
 #include "drv_pwm.h"
 #include "drv_uart.h"
 #include "drv_hcsr04.h"
+#include "drv_i2c_lcd.h"
 
 #endif

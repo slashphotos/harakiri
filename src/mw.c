@@ -468,6 +468,7 @@ void pass(void)                                                      // Crashpil
 
 void loop(void)
 {
+#define StickTravel 250
 #define F_CUT 20.0f                                                  // pt1 element http://www.multiwii.com/forum/viewtopic.php?f=23&t=2624
 #define RC 0.5f / (M_PI * F_CUT)                                     // pt1 element http://www.multiwii.com/forum/viewtopic.php?f=23&t=2624
     static float    lastDTerm[3] = { 0.0, 0.0, 0.0};                 // pt1 element http://www.multiwii.com/forum/viewtopic.php?f=23&t=2624
@@ -651,7 +652,9 @@ void loop(void)
             auxState |= (rcData[AUX1 + i] < 1300) << (3 * i) | (1300 < rcData[AUX1 + i] && rcData[AUX1 + i] < 1700) << (3 * i + 1) | (rcData[AUX1 + i] > 1700) << (3 * i + 2);
         for (i = 0; i < CHECKBOXITEMS; i++) rcOptions[i] = (auxState & cfg.activate[i]) > 0;
 
-        if (feature(FEATURE_LCD) && rcData[THROTTLE] < cfg.mincheck && rcData[YAW] > cfg.maxcheck && rcData[PITCH] > cfg.maxcheck && !f.ARMED) serialOSD();
+        // Johannes changed
+        if (feature(FEATURE_LCD) && rcData[THROTTLE] < cfg.mincheck && rcData[YAW] > (cfg.midrc + StickTravel) && rcData[PITCH] > (cfg.midrc + StickTravel) && !f.ARMED) serialOSD();
+//        if (feature(FEATURE_LCD) && rcData[THROTTLE] < cfg.mincheck && rcData[YAW] > cfg.maxcheck && rcData[PITCH] > cfg.maxcheck && !f.ARMED) serialOSD();
 
         if ((rcOptions[BOXARM]) == 0) f.OK_TO_ARM = 1;               // Moved it here
 

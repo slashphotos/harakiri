@@ -29,10 +29,15 @@
  * OF SUCH DAMAGE.
  */
 
+// last changes for i2c_OLED Display
+// June 2013  Johannes
+
 #include "board.h"
 #include "printf.h"
 
 #define PRINTF_LONG_SUPPORT
+
+extern bool i2cLCD;   // true, if an OLED-Display is connected, Johannes
 
 typedef void (*putcf) (void *, char);
 static putcf stdout_putf;
@@ -139,9 +144,19 @@ static void putchw(void *putp, putcf putf, int n, char z, char *bf)
     while (*p++ && n > 0)
         n--;
     while (n-- > 0)
-        putf(putp, fc);
+    {  // Johannes
+        if (i2cLCD)
+            i2c_OLED_send_char(fc);
+        else
+            putf(putp, fc);
+    }
     while ((ch = *bf++))
-        putf(putp, ch);
+    {  // Johannes
+        if (i2cLCD)
+            i2c_OLED_send_char(ch);
+        else
+            putf(putp, ch);
+    }
 }
 
 void tfp_format(void *putp, putcf putf, char *fmt, va_list va)
@@ -153,8 +168,12 @@ void tfp_format(void *putp, putcf putf, char *fmt, va_list va)
     while ((ch = *(fmt++)))
     {
         if (ch != '%')
-            putf(putp, ch);
-        else
+        {  // Johannes
+            if (i2cLCD)
+                i2c_OLED_send_char(ch);
+            else
+                putf(putp, ch);
+        } else
         {
             char lz = 0;
 #ifdef 	PRINTF_LONG_SUPPORT
@@ -215,13 +234,19 @@ void tfp_format(void *putp, putcf putf, char *fmt, va_list va)
                 putchw(putp, putf, w, lz, bf);
                 break;
             case 'c':
-                putf(putp, (char) (va_arg(va, int)));
+                if (i2cLCD)  // Johannes
+                    i2c_OLED_send_char((char) (va_arg(va, int)));
+                else
+                    putf(putp, (char) (va_arg(va, int)));
                 break;
             case 's':
                 putchw(putp, putf, w, 0, va_arg(va, char *));
                 break;
             case '%':
-                putf(putp, ch);
+                if (i2cLCD)  // Johannes
+                    i2c_OLED_send_char(ch);
+                else
+                    putf(putp, ch);
             default:
                 break;
             }
@@ -244,7 +269,8 @@ void tfp_printf(char *fmt, ...)
     va_start(va, fmt);
     tfp_format(stdout_putp, stdout_putf, fmt, va);
     va_end(va);
-    while (!uartTransmitEmpty());
+    if (!i2cLCD)  // Johannes
+        while (!uartTransmitEmpty());
 }
 
 static void putcp(void *p, char c)

@@ -71,11 +71,11 @@ typedef enum MultiType
 
 typedef enum GimbalFlags
 {
-    GIMBAL_NORMAL = 1 << 0,
-    GIMBAL_TILTONLY = 1 << 1,
+    GIMBAL_NORMAL       = 1 << 0,
+    GIMBAL_TILTONLY     = 1 << 1,
     GIMBAL_DISABLEAUX34 = 1 << 2,
-    GIMBAL_FORWARDAUX = 1 << 3,
-    GIMBAL_MIXTILT = 1 << 4,
+    GIMBAL_FORWARDAUX   = 1 << 3,
+    GIMBAL_MIXTILT      = 1 << 4,
 } GimbalFlags;
 
 /*********** RC alias *****************/
@@ -489,7 +489,6 @@ void Sonar_update(void);
 
 // Output
 uint8_t mixerInit(void);
-//void mixerInit(void);
 void mixerLoadMix(int index);
 void writeServos(void);
 void writeMotors(void);

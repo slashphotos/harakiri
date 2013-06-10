@@ -1,4 +1,5 @@
 #include "board.h"
+#include "mw.h"    // Johannes
 
 typedef struct gpio_config_t
 {
@@ -101,6 +102,7 @@ void systemInit(void)
 #ifndef FY90Q
     delay(200);                                       // Daddy.W & Crashpilot sleep for 200ms
     i2cInit(I2C2);
+    initI2cLCD(false);                               // if connected, display startup message, Johannes
 #endif
 
     // sleep for 100ms

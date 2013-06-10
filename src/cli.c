@@ -18,11 +18,17 @@ static void cliStatus(char *cmdline);
 static void cliServo(char *cmdline);
 static void cliVersion(char *cmdline);
 static void cliScanI2Cbus(char *cmdline);
+
+// serial LCD
 static void LCDinit(void);
+static void LCDinit_Serial(void);
 static void LCDoff(void);
 static void LCDclear(void);
 static void LCDline1(void);
 static void LCDline2(void);
+
+// OLED-Display
+extern bool i2cLCD;                         // true, if an OLED-Display is connected
 
 // from sensors.c
 extern uint8_t batteryCellCount;
@@ -35,10 +41,12 @@ extern const char rcChannelLetters[];
 static char cliBuffer[48];
 static uint32_t bufferIndex = 0;
 
+
 static float _atof(const char *p);
 static char *ftoa(float x, char *floatString);
 
-// sync this with MultiType enum from mw.h
+
+// sync this with MultiType enum from mw.h, last change Johannes
 const char * const mixerNames[] = {
     "TRI",              // 1
     "QUADP",            // 2
@@ -60,8 +68,8 @@ const char * const mixerNames[] = {
     "HEX6H",            // 18
     "CUSTOM",           // 19
     "DUALCOPTER",       // 20
-		"SINGLECOPTER",     // 21
-		"HEXV6",            // 22
+    "SINGLECOPTER",     // 21
+    "HEXV6",            // 22
 #ifdef DEFINED_FW_DRAG
     "FW_DRAG",          // 23
 #endif
@@ -112,7 +120,7 @@ const clicmd_t cmdTable[] =
     { "map", "mapping of rc channel order", cliMap },
     { "mixer", "mixer name or list", cliMixer },
     { "save", "save and reboot", cliSave },
-//    { "scani2cbus", "scan for I2C devices", cliScanI2Cbus }, EDIT: Moved to clistatus
+    { "scani2cbus", "scan for I2C devices", cliScanI2Cbus },  // Johannes
     { "servo", "show and change values", cliServo },
     { "set", "name=value or blank or * for list", cliSet },
     { "status", "show system status & I2C devices", cliStatus },
@@ -166,15 +174,15 @@ const clivalue_t valueTable[] =
     { "failsafe_deadpilot",        VAR_UINT8,  &cfg.failsafe_deadpilot,          0,        250, 1 },
     { "failsafe_justph",           VAR_UINT8,  &cfg.failsafe_justph,             0,          1, 1 },
     { "failsafe_ignoreSNR",        VAR_UINT8,  &cfg.failsafe_ignoreSNR,          0,          1, 1 },
-    { "motor_pwm_rate",            VAR_UINT16, &cfg.motor_pwm_rate,             50,        498, 0 },
-    { "servo_pwm_rate",            VAR_UINT16, &cfg.servo_pwm_rate,             50,        498, 0 },
+    { "motor_pwm_rate",            VAR_UINT16, &cfg.motor_pwm_rate,             50,        498, 1 },
+    { "servo_pwm_rate",            VAR_UINT16, &cfg.servo_pwm_rate,             50,        498, 1 },
     { "serial_baudrate",           VAR_UINT32, &cfg.serial_baudrate,          1200,     115200, 0 },
     { "spektrum_hires",            VAR_UINT8,  &cfg.spektrum_hires,              0,          1, 0 },
     { "vbatscale",                 VAR_UINT8,  &cfg.vbatscale,                  10,        200, 0 },
     { "vbatmaxcellvoltage",        VAR_UINT8,  &cfg.vbatmaxcellvoltage,         10,         50, 0 },
     { "vbatmincellvoltage",        VAR_UINT8,  &cfg.vbatmincellvoltage,         10,         50, 0 },
     { "power_adc_channel",         VAR_UINT8,  &cfg.power_adc_channel,           0,          9, 0 },
-    { "yaw_direction",             VAR_INT8,   &cfg.yaw_direction,              -1,          1, 0 },
+    { "yaw_direction",             VAR_INT8,   &cfg.yaw_direction,              -1,          1, 1 },
     { "tri_yaw_middle",            VAR_UINT16, &cfg.servoConf[5].middle,      1000,       2000, 1 }, // Johannes
     { "tri_yaw_min",               VAR_UINT16, &cfg.servoConf[5].min,         1000,       2000, 1 }, // Johannes
     { "tri_yaw_max",               VAR_UINT16, &cfg.servoConf[5].max,         1000,       2000, 1 }, // Johannes
@@ -184,7 +192,7 @@ const clivalue_t valueTable[] =
     { "wing_right_min",            VAR_UINT16, &cfg.servoConf[4].min,         1000,       2000, 1 }, // Johannes
     { "wing_right_mid",            VAR_UINT16, &cfg.servoConf[4].middle,      1000,       2000, 1 }, // Johannes
     { "wing_right_max",            VAR_UINT16, &cfg.servoConf[4].max,         1000,       2000, 1 }, // Johannes
-/*    { "pitch_direction_l",         VAR_INT8,   &cfg.pitch_direction_l,          -1,          1, 0 },
+/*  { "pitch_direction_l",         VAR_INT8,   &cfg.pitch_direction_l,          -1,          1, 0 },
     { "pitch_direction_r",         VAR_INT8,   &cfg.pitch_direction_r,          -1,          1, 0 },
     { "roll_direction_l",          VAR_INT8,   &cfg.roll_direction_l,           -1,          1, 0 },
     { "roll_direction_r",          VAR_INT8,   &cfg.roll_direction_r,           -1,          1, 0 }, moved to ServoConf Johannes */
@@ -286,17 +294,17 @@ const clivalue_t valueTable[] =
     { "LED_pinout",                VAR_UINT8,  &cfg.LED_Pinout,                  0,          1, 0 },
     { "LED_ControlChannel",        VAR_UINT8,  &cfg.LED_ControlChannel,          1,         12, 0 }, // Aux Channel to controll the LED Pattern
     { "LED_ARMED",                 VAR_UINT8,  &cfg.LED_Armed,                   0,          1, 1 }, // 0 = Show LED only if armed, 1 = always show LED
-    { "LED_Toggle_Delay1",         VAR_UINT8, &cfg.LED_Toggle_Delay1,            0,        255, 0 },
-    { "LED_Toggle_Delay2",         VAR_UINT8, &cfg.LED_Toggle_Delay2,            0,        255, 0 },
-    { "LED_Toggle_Delay3",         VAR_UINT8, &cfg.LED_Toggle_Delay3,            0,        255, 0 },
+    { "LED_Toggle_Delay1",         VAR_UINT8,  &cfg.LED_Toggle_Delay1,           0,        255, 0 },
+    { "LED_Toggle_Delay2",         VAR_UINT8,  &cfg.LED_Toggle_Delay2,           0,        255, 0 },
+    { "LED_Toggle_Delay3",         VAR_UINT8,  &cfg.LED_Toggle_Delay3,           0,        255, 0 },
     { "LED_Pattern1",              VAR_UINT32, &cfg.LED_Pattern1,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 1
     { "LED_Pattern2",              VAR_UINT32, &cfg.LED_Pattern2,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 2
     { "LED_Pattern3",              VAR_UINT32, &cfg.LED_Pattern3,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 3};
-    { "plane_flap_mode",           VAR_UINT8,  &cfg.flapmode,                    0,          2, 0 }, // default NO_FLAP = 0 see mw.h     Johannes
+    { "plane_flap_mode",           VAR_UINT8,  &cfg.flapmode,                    0,          2, 1 }, // default NO_FLAP = 0 see mw.h     Johannes
     { "plane_flap_cannel",         VAR_UINT8,  &cfg.flapchan,                    0,          8, 0 }, // default AUX2 = 5 see mw.h        Johannes
     { "plane_flap_step",           VAR_UINT8,  &cfg.flapstep,                    0,         10, 0 }, // default 3 see mw.h               Johannes
     { "plane_flap_speed",          VAR_UINT8,  &cfg.flapspeed,                   0,         40, 1 }, // default 10 see mw.h              Johannes
-    { "plane_flap_dir",            VAR_INT8,   &cfg.flapdir,                    -1,          1, 0 }, // traveldirection                  Johannes
+    { "plane_flap_dir",            VAR_INT8,   &cfg.flapdir,                    -1,          1, 1 }, // traveldirection                  Johannes
     { "plane_flap_maxtavel",       VAR_UINT16, &cfg.flapmaxmove,                 0,        800, 1 }, // see mw.h                         Johannes        
     { "plane_flap_aileroncannel",  VAR_UINT8,  &cfg.aileron2,                    0,          8, 0 }, // default AUX1 = 4 see mw.h        Johannes
     { "plane_pidpol_roll",         VAR_INT8,   &cfg.rollPIDpol,                 -1,          1, 0 }, // default -1 see mw.h              Johannes
@@ -304,7 +312,7 @@ const clivalue_t valueTable[] =
     { "plane_pidpol_yaw",          VAR_INT8,   &cfg.yawPIDpol,                  -1,          1, 0 }, // default -1 see mw.h              Johannes
 #ifdef DEFINED_TILTROTOR
     { "plane_tilt_vtoldetect",     VAR_UINT16, &cfg.tilt_vtol_detect,         1000,       2000, 1 },  // Pattern for switch in airplane-mode, TILTROTOR @Johannes
-#endif    
+#endif
 };
 
 #define VALUE_COUNT (sizeof(valueTable) / sizeof(valueTable[0]))
@@ -1103,7 +1111,7 @@ static void cliStatus(char *cmdline)
     uartPrint("\r\n");
     printf("Config Size: %d Bytes\r\n",cfg.size);
     uartPrint("\r\n");
-    cliScanI2Cbus(&dummy);
+    //cliScanI2Cbus(&dummy);
 }
 
 static void cliVersion(char *cmdline)
@@ -1111,9 +1119,13 @@ static void cliVersion(char *cmdline)
     uartPrint(FIRMWARE);
 }
 
+// serialOSD    : 16 Ascii Char, 2 lines
+// OLED-Display : 22 Ascii Char, 8 lines, OSD is using lines 7 and 8,
+//                only on start displays firmwareversion and current mixer
 void serialOSD(void)
 {
-#define LCDdelay 12
+#define LCDdelay    12
+#define StickTravel 250
     static uint32_t rctimer;
     static uint8_t exit,input,lastinput,brake,brakeval,speeduptimer;
     static uint16_t DatasetNr;
@@ -1121,11 +1133,17 @@ void serialOSD(void)
     uint32_t timetmp;
 
     if (cliMode != 0) return;                                           // Don't do this if we are in cli mode
-    LCDinit();
+
+    LCDinit(); 
     printf(FIRMWAREFORLCD);                                             // Defined in mw.h
     LCDline2();
     printf("LCD Interface");
-    delay(2000);
+    if (i2cLCD)    // an OLED is collected Johannes
+    {
+        i2c_OLED_LCDsetLine(2);
+        printf("mixer %s\r\n", mixerNames[cfg.mixerConfiguration - 1]);
+    }
+    delay(3000);
     LCDclear();
     exit      = 0;
     DatasetNr = 0;
@@ -1148,13 +1166,15 @@ void serialOSD(void)
             LED0_TOGGLE;
             if (!feature(FEATURE_SPEKTRUM)) computeRC();
             GetActualRCdataOutRCDataSave();                             // Now we have new rcData to deal and MESS with
-            if (rcData[THROTTLE] < cfg.mincheck && rcData[YAW] > cfg.maxcheck && rcData[PITCH] > cfg.maxcheck) exit = 1; // Quit don't save
-            if (rcData[THROTTLE] < cfg.mincheck && rcData[YAW] < cfg.mincheck && rcData[PITCH] > cfg.maxcheck) exit = 2; // Quit and save
+            // Quit don't save
+            if (rcData[THROTTLE] < cfg.mincheck && rcData[YAW] > (cfg.midrc +StickTravel) && rcData[PITCH] > (cfg.midrc +StickTravel)) exit = 1; // Johannes
+            // Quit and save
+            if (rcData[THROTTLE] < cfg.mincheck && rcData[YAW] < (cfg.midrc -StickTravel) && rcData[PITCH] > (cfg.midrc +StickTravel)) exit = 2; // Johannes
             input = 0;
-            if (exit == 0 && input == 0 && rcData[PITCH] < cfg.mincheck) input = 1;
-            if (exit == 0 && input == 0 && rcData[PITCH] > cfg.maxcheck) input = 2;
-            if (exit == 0 && input == 0 && rcData[ROLL]  < cfg.mincheck) input = 3;
-            if (exit == 0 && input == 0 && rcData[ROLL]  > cfg.maxcheck) input = 4;
+            if (exit == 0 && input == 0 && rcData[PITCH] < (cfg.midrc -StickTravel)) input = 1; // changed form cfg.mincheck to midrc-300 Johannes
+            if (exit == 0 && input == 0 && rcData[PITCH] > (cfg.midrc +StickTravel)) input = 2; // cfg.mincheck
+            if (exit == 0 && input == 0 && rcData[ROLL]  < (cfg.midrc -StickTravel)) input = 3; // cfg.mincheck
+            if (exit == 0 && input == 0 && rcData[ROLL]  > (cfg.midrc +StickTravel)) input = 4; // cfg.mincheck
 
             if (lastinput == input)                                     // Adjust Inputspeed
             {
@@ -1219,7 +1239,7 @@ void serialOSD(void)
                 cliPrintVar(setval, 0);
                 break;
             }
-        }                                                               // End of 50Hz Loop
+        }                                                           // End of 50Hz Loop
     }
     delay(500);
     LCDclear();
@@ -1282,7 +1302,7 @@ static void changeval(const clivalue_t *var, const int8_t adder)
     }
 }
 
-void LCDinit(void)
+void LCDinit_Serial(void)
 {
     serialInit(9600);                                                   // INIT LCD HERE
     LCDoff();
@@ -1298,45 +1318,74 @@ void LCDinit(void)
 
 void LCDoff(void)
 {
-    delay(LCDdelay);
-    uartWrite(0xFE);
-    delay(LCDdelay);
-    uartWrite(0x08);                                                    // LCD Display OFF
-    delay(LCDdelay);
+    if (i2cLCD)  // Johannes
+        i2c_clear_OLED();
+    else
+    {
+        delay(LCDdelay);
+        uartWrite(0xFE);
+        delay(LCDdelay);
+        uartWrite(0x08);                                                // LCD Display OFF
+        delay(LCDdelay);
+    }
 }
 
 void LCDclear(void)                                                     // clear screen, cursor line 1, pos 0
 {
-    delay(LCDdelay);
-    uartWrite(0xFE);
-    delay(LCDdelay);
-    uartWrite(0x01);                                                    // Clear
+    if (i2cLCD)  // Johannes
+        i2c_clear_OLED();
+    else
+    {
+        delay(LCDdelay);
+        uartWrite(0xFE);
+        delay(LCDdelay);
+        uartWrite(0x01);                                                // Clear
+    }
     LCDline1();
 }
 
 void LCDline1(void)                                                     // Sets LCD Cursor to line 1 pos 0
 {
-    delay(LCDdelay);
-    uartWrite(0xFE);
-    delay(LCDdelay);
-    uartWrite(0x80);                                                    // Line #1 pos 0
-    delay(LCDdelay);
+    if (i2cLCD)  // Johannes
+        i2c_clr_line(7);
+    else
+    {
+        delay(LCDdelay);
+        uartWrite(0xFE);
+        delay(LCDdelay);
+        uartWrite(0x80);                                                // Line #1 pos 0
+        delay(LCDdelay);
+    }
 }
 
 void LCDline2(void)                                                     // Sets LCD Cursor to line 2 pos 0
 {
-    delay(LCDdelay);
-    uartWrite(0xFE);
-    delay(LCDdelay);
-    uartWrite(0xC0);  	                                                // Line #2
-    delay(LCDdelay);
-    printf("               ");                                          // Clear Line #2
-    delay(LCDdelay);
-    uartWrite(0xFE);
-    delay(LCDdelay);
-    uartWrite(0xC0);  	                                                // Line #2
-    delay(LCDdelay);
+    if (i2cLCD)  // Johannes
+        i2c_clr_line(8);
+    else
+    {
+        delay(LCDdelay);
+        uartWrite(0xFE);
+        delay(LCDdelay);
+        uartWrite(0xC0);  	                                            // Line #2
+        delay(LCDdelay);
+        printf("               ");                                      // Clear Line #2
+        delay(LCDdelay);
+        uartWrite(0xFE);
+        delay(LCDdelay);
+        uartWrite(0xC0);  	                                            // Line #2
+        delay(LCDdelay);
+    }
 }
+
+
+void LCDinit(void)  // changed Johannes
+{
+    i2cLCD = false;
+    if (!initI2cLCD(true))
+        LCDinit_Serial();
+}
+
 
 void cliProcess(void)
 {
@@ -1454,6 +1503,7 @@ void cliProcess(void)
 #define MMA8452_ADDRESS       0x1C
 #define HMC5883L_ADDRESS      0x1E  // 0xA
 #define DaddyW_SONAR          0x20  // Daddy Walross Sonar
+#define EagleTreePowerPanel   0x3B  // Eagle Tree Power Panel
 #define OLED_address          0x3C  // OLED at address 0x3C in 7bit
 #define ADXL345_ADDRESS       0x53
 #define BMA180_adress         0x64  // don't respond ??
@@ -1508,7 +1558,7 @@ static void cliScanI2Cbus(char *cmdline)
         if (!ack && address == MPU6050_ADDRESS)         // Special case mpu and L3G4200D have same Adr.
         {
             sig = 0;
-            i2cRead(0x68, 0x0F, 1, &sig);
+            i2cRead(MPU6050_ADDRESS, 0x0F, 1, &sig);
             if (sig == 0xD3)
             {
                 ack = true;              
@@ -1530,10 +1580,13 @@ static void cliScanI2Cbus(char *cmdline)
                 strcpy(buf,"HMC5883L");
                 break;
             case DaddyW_SONAR:                          // Daddy Walross Sonar added
-                strcpy(buf,"DaddyW Sonar");							
-                break;						
+                strcpy(buf,"DaddyW Sonar");
+                break;
+            case EagleTreePowerPanel:
+                strcpy(buf,"EagleTreePowerPanel");
+                break;
             case OLED_address:
-                strcpy(buf,"OLED");                     // i2c_OLED_init();
+                strcpy(buf,"OLED");
                 break;
             case ADXL345_ADDRESS:                       // ADXL added
                 strcpy(buf,"ADXL345");
@@ -1553,7 +1606,7 @@ static void cliScanI2Cbus(char *cmdline)
                 strcpy(buf,"UNKNOWN TO ME");
                 break;
             }
-            printf(" Probably it's %s \r\n",buf);
+            printf(" Probably it's an %s \r\n",buf);
             nDevices++;
         }
         delay(50);
@@ -1562,3 +1615,4 @@ static void cliScanI2Cbus(char *cmdline)
     if (nDevices == 0) printf("No I2C devices found\r\n");
     else printf("Done, %d Devices found\r\n",nDevices);
 }
+
