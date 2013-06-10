@@ -19,17 +19,17 @@ void EXTI15_10_IRQHandler(void)
 
 typedef struct
 {
-    int16_t ac1;
-    int16_t ac2;
-    int16_t ac3;
+    int16_t  ac1;
+    int16_t  ac2;
+    int16_t  ac3;
     uint16_t ac4;
     uint16_t ac5;
     uint16_t ac6;
-    int16_t b1;
-    int16_t b2;
-    int16_t mb;
-    int16_t mc;
-    int16_t md;
+    int16_t  b1;
+    int16_t  b2;
+    int16_t  mb;
+    int16_t  mc;
+    int16_t  md;
 } bmp085_smd500_calibration_param_t;
 
 typedef struct
@@ -78,18 +78,18 @@ typedef struct
 #define SMD500_PARAM_MI      3791        //calibration parameter
 
 static bmp085_t bmp085 = { { 0, } };
-static bool bmp085InitDone = false;
+static bool     bmp085InitDone = false;
 static uint16_t bmp085_ut;  // static result of temperature measurement
 static uint32_t bmp085_up;  // static result of pressure measurement
 
-static void bmp085_get_cal_param(void);
-static void bmp085_start_ut(void);
-static void bmp085_get_ut(void);
-static void bmp085_start_up(void);
-static void bmp085_get_up(void);
-static int16_t bmp085_get_temperature(uint32_t ut);
-static int32_t bmp085_get_pressure(uint32_t up);
-static int32_t bmp085_calculate(void);
+static void     bmp085_get_cal_param(void);
+static void     bmp085_start_ut(void);
+static void     bmp085_get_ut(void);
+static void     bmp085_start_up(void);
+static void     bmp085_get_up(void);
+static int16_t  bmp085_get_temperature(uint32_t ut);
+static float    bmp085_get_pressure(uint32_t up);
+static float    bmp085_calculate(void);
 
 bool bmp085Detect(baro_t *baro)
 {
@@ -98,11 +98,9 @@ bool bmp085Detect(baro_t *baro)
     NVIC_InitTypeDef NVIC_InitStructure;
     uint8_t data;
 
-    if (bmp085InitDone)
-        return true;
+    if (bmp085InitDone) return true;
 
-    // PC13, PC14 (Barometer XCLR reset output, EOC input)
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13;
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13;                                   // PC13, PC14 (Barometer XCLR reset output, EOC input)
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
     GPIO_Init(GPIOC, &GPIO_InitStructure);
@@ -111,16 +109,16 @@ bool bmp085Detect(baro_t *baro)
     GPIO_Init(GPIOC, &GPIO_InitStructure);
     BARO_ON;
 
-    // EXTI interrupt for barometer EOC
-    GPIO_EXTILineConfig(GPIO_PortSourceGPIOC, GPIO_PinSource14);
+
+    GPIO_EXTILineConfig(GPIO_PortSourceGPIOC, GPIO_PinSource14);                 // EXTI interrupt for barometer EOC
     EXTI_InitStructure.EXTI_Line = EXTI_Line14;
     EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
     EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising;
     EXTI_InitStructure.EXTI_LineCmd = ENABLE;
     EXTI_Init(&EXTI_InitStructure);
 
-    // Enable and set EXTI10-15 Interrupt to the lowest priority
-    NVIC_InitStructure.NVIC_IRQChannel = EXTI15_10_IRQn;
+
+    NVIC_InitStructure.NVIC_IRQChannel = EXTI15_10_IRQn;                         // Enable and set EXTI10-15 Interrupt to the lowest priority
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0F;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x0F;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
@@ -172,56 +170,42 @@ static int16_t bmp085_get_temperature(uint32_t ut)
     temperature = ((bmp085.param_b5 + 8) >> 4);  // temperature in 0.1°C
 
 #ifdef BMP_TEMP_OSS
-    temp *= (1 << BMP_TEMP_OSS) - 1;        // multiply the temperature variable by 3 - we have tau == 1/4
-    temp += ((uint32_t)temperature) << 8;   // add on the buffer
-    temp >>= BMP_TEMP_OSS;                  // divide by 4
+    temp *= (1 << BMP_TEMP_OSS) - 1;             // multiply the temperature variable by 3 - we have tau == 1/4
+    temp += ((uint32_t)temperature) << 8;        // add on the buffer
+    temp >>= BMP_TEMP_OSS;                       // divide by 4
     return (int16_t)temp;
 #else
     return temperature;
 #endif
 }
 
-static int32_t bmp085_get_pressure(uint32_t up)
+static float bmp085_get_pressure(uint32_t up)
 {
-    int32_t pressure, x1, x2, x3, b3, b6;
+    int32_t  x1, x2, x3, b3, b6;
     uint32_t b4, b7;
-
+    float    pressure;
     b6 = bmp085.param_b5 - 4000;
     // *****calculate B3************
     x1 = (b6 * b6) >> 12;
     x1 *= bmp085.cal_param.b2;
     x1 >>= 11;
-
     x2 = (bmp085.cal_param.ac2 * b6);
     x2 >>= 11;
-
     x3 = x1 + x2;
-
     b3 = (((((int32_t)bmp085.cal_param.ac1) * 4 + x3) << bmp085.oversampling_setting) + 2) >> 2;
-
     // *****calculate B4************
     x1 = (bmp085.cal_param.ac3 * b6) >> 13;
     x2 = (bmp085.cal_param.b1 * ((b6 * b6) >> 12) ) >> 16;
     x3 = ((x1 + x2) + 2) >> 2;
     b4 = (bmp085.cal_param.ac4 * (uint32_t) (x3 + 32768)) >> 15;
-
     b7 = ((uint32_t)(up - b3) * (50000 >> bmp085.oversampling_setting));
-    if (b7 < 0x80000000)
-    {
-        pressure = (b7 << 1) / b4;
-    }
-    else
-    {
-        pressure = (b7 / b4) << 1;
-    }
-
-    x1 = pressure >> 8;
+    if (b7 < 0x80000000) pressure = (float)((b7 << 1) / b4);
+    else pressure = (float)((b7 / b4) << 1);
+    x1 = (int32_t)(pressure * 0.00390625f);                               //  x1 = pressure >> 8;
     x1 *= x1;
     x1 = (x1 * SMD500_PARAM_MG) >> 16;
-    x2 = (pressure * SMD500_PARAM_MH) >> 16;
-    pressure += (x1 + x2 + SMD500_PARAM_MI) >> 4;   // pressure in Pa
-
-    return pressure;
+    x2 = (int32_t)((pressure * SMD500_PARAM_MH) / 65536.0f);              // x2 = (pressure * SMD500_PARAM_MH) >> 16;
+    return pressure + (float)((x1 + x2 + SMD500_PARAM_MI) / 16.0f);       // pressure += (x1 + x2 + SMD500_PARAM_MI) >> 4; // pressure in Pa
 }
 
 static void bmp085_start_ut(void)
@@ -279,7 +263,7 @@ static void bmp085_get_up(void)
     bmp085_up = (((uint32_t) data[0] << 16) | ((uint32_t) data[1] << 8) | (uint32_t) data[2]) >> (8 - bmp085.oversampling_setting);
 }
 
-static int32_t bmp085_calculate(void)
+static float bmp085_calculate(void)
 {
     bmp085_get_temperature(bmp085_ut);
     return bmp085_get_pressure(bmp085_up);

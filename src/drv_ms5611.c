@@ -21,7 +21,7 @@ static void     ms5611_start_ut(void);
 static void     ms5611_get_ut(void);
 static void     ms5611_start_up(void);
 static void     ms5611_get_up(void);
-static int32_t  ms5611_calculate(void);
+static float    ms5611_calculate(void);
 static uint32_t ms5611_ut;                                       // static result of temperature measurement
 static uint32_t ms5611_up;                                       // static result of pressure measurement
 static uint16_t ms5611_c[PROM_NB];                               // on-chip ROM
@@ -55,7 +55,7 @@ static void ms5611_reset(void)
 static uint16_t ms5611_prom(int8_t coef_num)
 {
     uint8_t  rxbuf[2] = { 0, 0 };
-    delay(20);
+    delay(10);
     i2cRead(MS5611_ADDR, CMD_PROM_RD + coef_num * 2, 2, rxbuf);  // send PROM READ command
     return ((uint16_t)rxbuf[0] << 8) | (uint16_t)rxbuf[1];
 }
@@ -89,32 +89,33 @@ static void ms5611_get_up(void)
     if (tmp !=0) ms5611_up = tmp;                                // Keep old on error
 }
 
-static int32_t ms5611_calculate(void)
+static float ms5611_calculate(void)
 {
-    int32_t  temp, off2 = 0, sens2 = 0, delt, pressure;
-    int64_t  dT, off, sens;
-    float dTf;
+    int32_t  temp;
+    int64_t  off, sens;
+    float    dTf, delt;
+    float    off2 = 0, sens2 = 0;
+  
     dTf  = (float)ms5611_ut - ((float)ms5611_c[5] * 256.0f);
-    dT   = dTf;
-    off  = ((uint32_t)ms5611_c[2] << 16) + ((dTf * (float)ms5611_c[4]) / 128);
-    sens = ((uint32_t)ms5611_c[1] << 15) + ((dTf * (float)ms5611_c[3]) / 256);
-    temp  = 2000 + ((dT * ms5611_c[6]) >> 23);                   // temperature is not so important not so precise
+    temp = 2000 + (((int64_t)dTf * ms5611_c[6]) >> 23);          // temperature is not so important not so precise
+    off  = (int64_t)((uint32_t)ms5611_c[2] << 16) + (dTf / 128.0f * (float)ms5611_c[4]);
+    sens = (int64_t)((uint32_t)ms5611_c[1] << 15) + (dTf / 256.0f * (float)ms5611_c[3]);
+
     if (temp < 2000)                                             // temperature lower than 20degC
     {
-        delt  = temp - 2000;
-        delt  = 5 * delt * delt;
-        off2  = (delt >> 1);
-        sens2 = (delt >> 2);
+        delt  = (float)(temp - 2000);
+        delt  = delt * delt;
+        off2  = delt * 2.50f;
+        sens2 = delt * 1.25f;
         if (temp < -1500)                                        // temperature lower than -15degC
         {
-            delt   = temp + 1500;
-            delt   = delt * delt;
-            off2  += (  7 * delt);
-            sens2 += ((11 * delt) >> 1);
+            delt  = (float)(temp + 1500);
+            delt  = delt * delt;
+            off2  = off2  + delt * 7.0f;
+            sens2 = sens2 + delt * 5.5f;
         }
     }
-    off     -= off2;
-    sens    -= sens2;
-    pressure = (((ms5611_up * sens ) >> 21) - off) >> 15;
-    return pressure;
+    off     = off  - (int64_t)off2;
+    sens    = sens - (int64_t)sens2;
+    return (float)(((((int64_t)ms5611_up * sens ) >> 21) - off) >> 15);
 }
