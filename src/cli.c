@@ -15,7 +15,6 @@ static void cliMixer(char *cmdline);
 static void cliSave(char *cmdline);
 static void cliSet(char *cmdline);
 static void cliStatus(char *cmdline);
-static void cliServo(char *cmdline);
 static void cliVersion(char *cmdline);
 static void cliScanI2Cbus(char *cmdline);
 static void LCDinit(void);
@@ -39,36 +38,12 @@ static float _atof(const char *p);
 static char *ftoa(float x, char *floatString);
 
 // sync this with MultiType enum from mw.h
-const char * const mixerNames[] = {
-    "TRI",              // 1
-    "QUADP",            // 2
-    "QUADX",            // 3
-    "BI",               // 4
-    "GIMBAL",           // 5
-    "Y6",               // 6
-    "HEX6",             // 7
-    "FLYING_WING",      // 8
-    "Y4",               // 9
-    "HEX6X",            // 10
-    "OCTOX8",           // 11
-    "OCTOFLATP",        // 12
-    "OCTOFLATX",        // 13
-    "AIRPLANE",         // 14
-    "HELI_120_CCPM",    // 15
-    "HELI_90_DEG",      // 16
-    "VTAIL4",           // 17
-    "HEX6H",            // 18
-    "CUSTOM",           // 19
-    "DUALCOPTER",       // 20
-		"SINGLECOPTER",     // 21
-		"HEXV6",            // 22
-#ifdef DEFINED_FW_DRAG
-    "FW_DRAG",          // 23
-#endif
-#ifdef DEFINED_TILTROTOR
-    "TILTROTOR",        // 24
-#endif
-    NULL
+const char * const mixerNames[] =
+{
+    "TRI", "QUADP", "QUADX", "BI",
+    "GIMBAL", "Y6", "HEX6",
+    "FLYING_WING", "Y4", "HEX6X", "OCTOX8", "OCTOFLATP", "OCTOFLATX",
+    "AIRPLANE", "HELI_120_CCPM", "HELI_90_DEG", "VTAIL4", "CUSTOM", NULL
 };
 
 // sync this with AvailableFeatures enum from board.h
@@ -112,10 +87,9 @@ const clicmd_t cmdTable[] =
     { "map", "mapping of rc channel order", cliMap },
     { "mixer", "mixer name or list", cliMixer },
     { "save", "save and reboot", cliSave },
-//    { "scani2cbus", "scan for I2C devices", cliScanI2Cbus }, EDIT: Moved to clistatus
-    { "servo", "show and change values", cliServo },
+    { "scani2cbus", "scan for I2C devices", cliScanI2Cbus },
     { "set", "name=value or blank or * for list", cliSet },
-    { "status", "show system status & I2C devices", cliStatus },
+    { "status", "show system status", cliStatus },
     { "version", "", cliVersion },
 };
 #define CMD_COUNT (sizeof(cmdTable) / sizeof(cmdTable[0]))
@@ -144,8 +118,10 @@ const clivalue_t valueTable[] =
 {
     { "deadband",                  VAR_UINT8,  &cfg.deadband,                    0,         32, 1 },
     { "yawdeadband",               VAR_UINT8,  &cfg.yawdeadband,                 0,        100, 1 },
-    { "alt_hold_throttle_neutral", VAR_UINT8,  &cfg.alt_hold_throttle_neutral,   1,        20,  1 },
+    { "alt_hold_throttle_neutral", VAR_UINT8,  &cfg.alt_hold_throttle_neutral,   1,         20, 1 },
+    { "gps_adddb",                 VAR_UINT8,  &cfg.gps_adddb,                   0,        100, 1 },
     { "midrc",                     VAR_UINT16, &cfg.midrc,                    1200,       1700, 1 },
+    { "auxChannels",               VAR_UINT8,  &cfg.auxChannels,                 4,         14, 0 },
     { "rc_rate",                   VAR_UINT8,  &cfg.rcRate8,                     0,        250, 1 },
     { "rc_expo",                   VAR_UINT8,  &cfg.rcExpo8,                     0,        100, 1 },
     { "thr_mid",                   VAR_UINT8,  &cfg.thrMid8,                     0,        100, 1 },
@@ -175,31 +151,34 @@ const clivalue_t valueTable[] =
     { "vbatmincellvoltage",        VAR_UINT8,  &cfg.vbatmincellvoltage,         10,         50, 0 },
     { "power_adc_channel",         VAR_UINT8,  &cfg.power_adc_channel,           0,          9, 0 },
     { "yaw_direction",             VAR_INT8,   &cfg.yaw_direction,              -1,          1, 0 },
-    { "tri_yaw_middle",            VAR_UINT16, &cfg.servoConf[5].middle,      1000,       2000, 1 }, // Johannes
-    { "tri_yaw_min",               VAR_UINT16, &cfg.servoConf[5].min,         1000,       2000, 1 }, // Johannes
-    { "tri_yaw_max",               VAR_UINT16, &cfg.servoConf[5].max,         1000,       2000, 1 }, // Johannes
-    { "wing_left_min",             VAR_UINT16, &cfg.servoConf[3].min,         1000,       2000, 1 }, // Johannes
-    { "wing_left_mid",             VAR_UINT16, &cfg.servoConf[3].middle,      1000,       2000, 1 }, // Johannes
-    { "wing_left_max",             VAR_UINT16, &cfg.servoConf[3].max,         1000,       2000, 1 }, // Johannes
-    { "wing_right_min",            VAR_UINT16, &cfg.servoConf[4].min,         1000,       2000, 1 }, // Johannes
-    { "wing_right_mid",            VAR_UINT16, &cfg.servoConf[4].middle,      1000,       2000, 1 }, // Johannes
-    { "wing_right_max",            VAR_UINT16, &cfg.servoConf[4].max,         1000,       2000, 1 }, // Johannes
-/*    { "pitch_direction_l",         VAR_INT8,   &cfg.pitch_direction_l,          -1,          1, 0 },
+    { "tri_yaw_middle",            VAR_UINT16, &cfg.tri_yaw_middle,              0,       2000, 1 },
+    { "tri_yaw_min",               VAR_UINT16, &cfg.tri_yaw_min,                 0,       2000, 1 },
+    { "tri_yaw_max",               VAR_UINT16, &cfg.tri_yaw_max,                 0,       2000, 1 },
+    { "wing_left_min",             VAR_UINT16, &cfg.wing_left_min,               0,       2000, 0 },
+    { "wing_left_mid",             VAR_UINT16, &cfg.wing_left_mid,               0,       2000, 0 },
+    { "wing_left_max",             VAR_UINT16, &cfg.wing_left_max,               0,       2000, 0 },
+    { "wing_right_min",            VAR_UINT16, &cfg.wing_right_min,              0,       2000, 0 },
+    { "wing_right_mid",            VAR_UINT16, &cfg.wing_right_mid,              0,       2000, 0 },
+    { "wing_right_max",            VAR_UINT16, &cfg.wing_right_max,              0,       2000, 0 },
+    { "pitch_direction_l",         VAR_INT8,   &cfg.pitch_direction_l,          -1,          1, 0 },
     { "pitch_direction_r",         VAR_INT8,   &cfg.pitch_direction_r,          -1,          1, 0 },
     { "roll_direction_l",          VAR_INT8,   &cfg.roll_direction_l,           -1,          1, 0 },
-    { "roll_direction_r",          VAR_INT8,   &cfg.roll_direction_r,           -1,          1, 0 }, moved to ServoConf Johannes */
+    { "roll_direction_r",          VAR_INT8,   &cfg.roll_direction_r,           -1,          1, 0 },
     { "gimbal_flags",              VAR_UINT8,  &cfg.gimbal_flags,                0,        255, 0 },
     { "gimbal_pitch_gain",         VAR_INT8,   &cfg.gimbal_pitch_gain,        -100,        100, 0 },
     { "gimbal_roll_gain",          VAR_INT8,   &cfg.gimbal_roll_gain,         -100,        100, 0 },
-    { "gimbal_pitch_min",          VAR_UINT16, &cfg.servoConf[0].min,         1000,       2000, 0 },
-    { "gimbal_pitch_max",          VAR_UINT16, &cfg.servoConf[0].max,         1000,       2000, 0 },
-    { "gimbal_pitch_mid",          VAR_UINT16, &cfg.servoConf[1].middle,      1000,       2000, 0 },
-    { "gimbal_roll_min",           VAR_UINT16, &cfg.servoConf[1].min,         1000,       2000, 0 },
-    { "gimbal_roll_max",           VAR_UINT16, &cfg.servoConf[1].max,         1000,       2000, 0 },
-    { "gimbal_roll_mid",           VAR_UINT16, &cfg.servoConf[1].middle,      1000,       2000, 0 },
+    { "gimbal_pitch_min",          VAR_UINT16, &cfg.gimbal_pitch_min,          100,       3000, 0 },
+    { "gimbal_pitch_max",          VAR_UINT16, &cfg.gimbal_pitch_max,          100,       3000, 0 },
+    { "gimbal_pitch_mid",          VAR_UINT16, &cfg.gimbal_pitch_mid,          100,       3000, 0 },
+    { "gimbal_roll_min",           VAR_UINT16, &cfg.gimbal_roll_min,           100,       3000, 0 },
+    { "gimbal_roll_max",           VAR_UINT16, &cfg.gimbal_roll_max,           100,       3000, 0 },
+    { "gimbal_roll_mid",           VAR_UINT16, &cfg.gimbal_roll_mid,           100,       3000, 0 },
     { "al_barolr",                 VAR_UINT8,  &cfg.al_barolr,                  30,        200, 1 },
     { "al_snrlr",                  VAR_UINT8,  &cfg.al_snrlr,                   30,        200, 1 },
-    { "al_lndpercent",             VAR_UINT8,  &cfg.al_lndpercent,               0,         80, 1 },
+    { "al_lndthr",                 VAR_UINT16, &cfg.al_lndthr,                   0,       2000, 1 },
+    { "al_debounce",               VAR_UINT8,  &cfg.al_debounce,                 0,         20, 1 },
+    { "al_tobaro",                 VAR_UINT16, &cfg.al_tobaro,                 100,       5000, 1 },
+    { "al_tosnr",                  VAR_UINT16, &cfg.al_tosnr,                  100,       5000, 1 },
     { "align_gyro_x",              VAR_INT8,   &cfg.align[ALIGN_GYRO][0],       -3,          3, 0 },
     { "align_gyro_y",              VAR_INT8,   &cfg.align[ALIGN_GYRO][1],       -3,          3, 0 },
     { "align_gyro_z",              VAR_INT8,   &cfg.align[ALIGN_GYRO][2],       -3,          3, 0 },
@@ -255,7 +234,6 @@ const clivalue_t valueTable[] =
     { "gps_nav_p",                 VAR_UINT8,  &cfg.P8[PIDNAVR],                 0,        200, 1 },
     { "gps_nav_i",                 VAR_UINT8,  &cfg.I8[PIDNAVR],                 0,        200, 1 },
     { "gps_nav_d",                 VAR_UINT8,  &cfg.D8[PIDNAVR],                 0,        200, 1 },
-    { "LED_invert",                VAR_UINT8,  &cfg.LED_invert,                  0,          1, 0 },
     { "looptime",                  VAR_UINT16, &cfg.looptime,                    0,       9000, 1 },
     { "oldcontroller",             VAR_UINT8,  &cfg.oldcontroller,               0,          1, 1 },
     { "p_pitch",                   VAR_UINT8,  &cfg.P8[PITCH],                   0,        200, 1 },
@@ -273,15 +251,15 @@ const clivalue_t valueTable[] =
     { "p_level",                   VAR_UINT8,  &cfg.P8[PIDLEVEL],                0,        200, 1 },
     { "i_level",                   VAR_UINT8,  &cfg.I8[PIDLEVEL],                0,        200, 1 },
     { "d_level",                   VAR_UINT8,  &cfg.D8[PIDLEVEL],                0,        200, 1 },
-    { "auxChannels",               VAR_UINT8,  &cfg.auxChannels,                 4,         14, 0 },
     { "snr_type",                  VAR_UINT8,  &cfg.snr_type,                    0,          4, 0 },
-    { "snr_min",                   VAR_UINT8,  &cfg.snr_min,                     0,        200, 1 },
-    { "snr_max",                   VAR_UINT16, &cfg.snr_max,                    50,        800, 1 },
+    { "snr_min",                   VAR_UINT8,  &cfg.snr_min,                     5,        200, 1 },
+    { "snr_max",                   VAR_UINT16, &cfg.snr_max,                    50,        700, 1 },
     { "snr_debug",                 VAR_UINT8,  &cfg.snr_debug,                   0,          1, 0 },
     { "snr_tilt",                  VAR_UINT8,  &cfg.snr_tilt,                   10,         50, 1 },
     { "snr_cf",                    VAR_FLOAT,  &cfg.snr_cf,                      0,          1, 1 },
     { "snr_diff",                  VAR_UINT8,  &cfg.snr_diff,                    0,        200, 1 },
     { "snr_land",                  VAR_UINT8,  &cfg.snr_land,                    0,          1, 1 },    
+    { "LED_invert",                VAR_UINT8,  &cfg.LED_invert,                  0,          1, 0 },
     { "LED_Type",                  VAR_UINT8,  &cfg.LED_Type,                    0,          3, 0 },
     { "LED_pinout",                VAR_UINT8,  &cfg.LED_Pinout,                  0,          1, 0 },
     { "LED_ControlChannel",        VAR_UINT8,  &cfg.LED_ControlChannel,          1,         12, 0 }, // Aux Channel to controll the LED Pattern
@@ -292,19 +270,6 @@ const clivalue_t valueTable[] =
     { "LED_Pattern1",              VAR_UINT32, &cfg.LED_Pattern1,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 1
     { "LED_Pattern2",              VAR_UINT32, &cfg.LED_Pattern2,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 2
     { "LED_Pattern3",              VAR_UINT32, &cfg.LED_Pattern3,                0, 0x7FFFFFFF, 0 }, // Pattern for Switch position 3};
-    { "plane_flap_mode",           VAR_UINT8,  &cfg.flapmode,                    0,          2, 0 }, // default NO_FLAP = 0 see mw.h     Johannes
-    { "plane_flap_cannel",         VAR_UINT8,  &cfg.flapchan,                    0,          8, 0 }, // default AUX2 = 5 see mw.h        Johannes
-    { "plane_flap_step",           VAR_UINT8,  &cfg.flapstep,                    0,         10, 0 }, // default 3 see mw.h               Johannes
-    { "plane_flap_speed",          VAR_UINT8,  &cfg.flapspeed,                   0,         40, 1 }, // default 10 see mw.h              Johannes
-    { "plane_flap_dir",            VAR_INT8,   &cfg.flapdir,                    -1,          1, 0 }, // traveldirection                  Johannes
-    { "plane_flap_maxtavel",       VAR_UINT16, &cfg.flapmaxmove,                 0,        800, 1 }, // see mw.h                         Johannes        
-    { "plane_flap_aileroncannel",  VAR_UINT8,  &cfg.aileron2,                    0,          8, 0 }, // default AUX1 = 4 see mw.h        Johannes
-    { "plane_pidpol_roll",         VAR_INT8,   &cfg.rollPIDpol,                 -1,          1, 0 }, // default -1 see mw.h              Johannes
-    { "plane_pidpol_pitch",        VAR_INT8,   &cfg.pitchPIDpol,                -1,          1, 0 }, // default -1 see mw.h              Johannes
-    { "plane_pidpol_yaw",          VAR_INT8,   &cfg.yawPIDpol,                  -1,          1, 0 }, // default -1 see mw.h              Johannes
-#ifdef DEFINED_TILTROTOR
-    { "plane_tilt_vtoldetect",     VAR_UINT16, &cfg.tilt_vtol_detect,         1000,       2000, 1 },  // Pattern for switch in airplane-mode, TILTROTOR @Johannes
-#endif    
 };
 
 #define VALUE_COUNT (sizeof(valueTable) / sizeof(valueTable[0]))
@@ -742,7 +707,6 @@ static void cliDump(char *cmdline)
         cliPrintVar(setval, 0);
         uartPrint("\r\n");
     }
-    cliServo("");
 }
 
 static void cliExit(char *cmdline)
@@ -1021,66 +985,10 @@ static void cliSet(char *cmdline)
     }
 }
 
-static void cliServo(char *cmdline)
-{
-    int i, check = 0;
-    uint8_t servo;
-    uint32_t len;
-    char *ptr;
-
-    len = strlen(cmdline);
-    if (len == 0) {
-        for (i = 0; i < MAX_SERVOS; i++) {      // print servo config
-            printf("servo %d %d %d %d %d\r\n",
-                i,
-                cfg.servoConf[i].min,
-                cfg.servoConf[i].max,
-                cfg.servoConf[i].middle,
-                cfg.servoConf[i].rate);
-            }
-        //printf("command: servo number min max middle rate (example: servo 1 1000 2000 1500 100)\r\n");
-    }
-    else {
-        servo = _atof(cmdline); 
-        ptr = cmdline;
-        servo = atoi(ptr); // get servo number
-        if (servo < MAX_SERVOS) {
-            ptr = strchr(ptr, ' ');
-            if (ptr) {
-                cfg.servoConf[servo].min = _atof(++ptr); 
-                check++;
-            }
-            ptr = strchr(ptr, ' ');
-            if (ptr) {
-                cfg.servoConf[servo].max = _atof(++ptr);
-                check++;
-            }
-            ptr = strchr(ptr, ' ');
-            if (ptr) {
-                cfg.servoConf[servo].middle = _atof(++ptr);
-                check++;
-            }
-            ptr = strchr(ptr, ' ');
-            if (ptr) {
-                cfg.servoConf[servo].rate = _atof(++ptr);
-                check++;
-            }
-            if (check != 4) {
-                uartPrint("Wrong number of arguments, needs min max midle rate\r\n");
-            } else {
-                cliServo("");
-            }
-        } else {
-            printf("Servo number must be between 0 and %d\r\n", MAX_SERVOS-1);
-        }
-    }
-}
-
 static void cliStatus(char *cmdline)
 {
     uint8_t i;
     uint32_t mask;
-    char dummy;
     uartPrint("\r\n");
     printf("System Uptime: %d seconds, Voltage: %d * 0.1V (%dS battery)\r\n",
            millis() / 1000, vbat, batteryCellCount);
@@ -1102,8 +1010,6 @@ static void cliStatus(char *cmdline)
     printf("Cycle Time: %d, I2C Errors: %d\r\n", cycleTime, i2cGetErrorCounter());
     uartPrint("\r\n");
     printf("Config Size: %d Bytes\r\n",cfg.size);
-    uartPrint("\r\n");
-    cliScanI2Cbus(&dummy);
 }
 
 static void cliVersion(char *cmdline)

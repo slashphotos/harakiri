@@ -110,20 +110,20 @@ bool hcsr04_init(sonar_config_t config)
     switch(config)
     {
     case sonar_pwm56:
-        trigger_pin = GPIO_Pin_8;                               // PWM5 (PB8) - 5v tolerant
-        echo_pin = GPIO_Pin_9;                                  // PWM6 (PB9) - 5v tolerant
-        exti_line = EXTI_Line9;
+        trigger_pin     = GPIO_Pin_8;                           // PWM5 (PB8) - 5v tolerant
+        echo_pin        = GPIO_Pin_9;                           // PWM6 (PB9) - 5v tolerant
+        exti_line       = EXTI_Line9;
         exti_pin_source = GPIO_PinSource9;
-        exti_irqn = EXTI9_5_IRQn;
-        returnvalue = true;
+        exti_irqn       = EXTI9_5_IRQn;
+        returnvalue     = true;
         break;
     case sonar_rc78:
-        trigger_pin = GPIO_Pin_0;                               // RX7 (PB0) - only 3.3v ( add a 1K Ohms resistor )
-        echo_pin = GPIO_Pin_1;                                  // RX8 (PB1) - only 3.3v ( add a 1K Ohms resistor )
-        exti_line = EXTI_Line1;
+        trigger_pin     = GPIO_Pin_0;                           // RX7 (PB0) - only 3.3v ( add a 1K Ohms resistor )
+        echo_pin        = GPIO_Pin_1;                           // RX8 (PB1) - only 3.3v ( add a 1K Ohms resistor )
+        exti_line       = EXTI_Line1;
         exti_pin_source = GPIO_PinSource1;
-        exti_irqn = EXTI1_IRQn;
-        returnvalue = true;
+        exti_irqn       = EXTI1_IRQn;
+        returnvalue     = true;
         break;
     case sonar_i2cDW:                                           // Deal with I2C daddy walross sonar
         delay(1000);                                            // sleep for 1000ms to startup sonar
@@ -137,21 +137,21 @@ bool hcsr04_init(sonar_config_t config)
         if (cfg.snr_type == 3 || cfg.snr_type == 4)             // Check for Maxbotics (no "else" stuff here to make it expandable)
             PulseLimitInUs = 62000;                             // Datasheet Limit 62ms
         // tp - trigger pin 
-        GPIO_InitStructure.GPIO_Pin = trigger_pin;
-        GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+        GPIO_InitStructure.GPIO_Pin   = trigger_pin;
+        GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_Out_PP;
         GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
         GPIO_Init(GPIOB, &GPIO_InitStructure);
         // ep - echo pin
-        GPIO_InitStructure.GPIO_Pin = echo_pin;
-        GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+        GPIO_InitStructure.GPIO_Pin   = echo_pin;
+        GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_IN_FLOATING;
         GPIO_Init(GPIOB, &GPIO_InitStructure);
         // setup external interrupt on echo pin
         GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, exti_pin_source);
         EXTI_ClearITPendingBit(exti_line);
-        EXTIInit.EXTI_Line = exti_line;
-        EXTIInit.EXTI_Mode = EXTI_Mode_Interrupt;
-        EXTIInit.EXTI_Trigger = EXTI_Trigger_Rising_Falling;
-        EXTIInit.EXTI_LineCmd = ENABLE;    
+        EXTIInit.EXTI_Line            = exti_line;
+        EXTIInit.EXTI_Mode            = EXTI_Mode_Interrupt;
+        EXTIInit.EXTI_Trigger         = EXTI_Trigger_Rising_Falling;
+        EXTIInit.EXTI_LineCmd         = ENABLE;    
         EXTI_Init(&EXTIInit);    
         NVIC_EnableIRQ(exti_irqn);
         last_measurement = 0;                                   // Force 1st measurement in XXX_get_distance

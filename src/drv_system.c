@@ -25,6 +25,7 @@ void SysTick_Handler(void)
     sysTickUptime++;
 }
 
+/*
 // Return system uptime in microseconds (rollover in 70minutes)
 uint32_t micros(void)
 {
@@ -37,6 +38,21 @@ uint32_t micros(void)
     while (ms != sysTickUptime);
     return (ms * 1000) + (72000 - cycle_cnt) / 72;
 }
+*/
+
+// r329 fix for micros() when not running at default 72MHz.
+// Was affecting intrc-only operation at 64MHz.
+// Return system uptime in microseconds (rollover in 70minutes)
+uint32_t micros(void)
+{
+    register uint32_t ms, cycle_cnt;
+    do {
+        ms = sysTickUptime;
+        cycle_cnt = SysTick->VAL;
+    } while (ms != sysTickUptime);
+    return (ms * 1000) + (usTicks * 1000 - cycle_cnt) / usTicks;
+}
+
 
 // Return system uptime in milliseconds (rollover in 49 days)
 uint32_t millis(void)
